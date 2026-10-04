@@ -1,6 +1,6 @@
 # FrankLuma 1.0 App Store listing
 
-Prepared for version 1.0.0, build 6. Copy is ready for review; account settings and upload remain pending; privacy/support URLs are verified live.
+Prepared for version 1.0.0, build 7. Copy is ready for review; account settings and upload remain pending; privacy/support URLs are verified live.
 
 ## App information
 
@@ -27,6 +27,7 @@ Uneven lighting can distract from carefully crafted stop-motion animation. Frank
 Open a clip, detect scenes and analyse the lighting. Compare your original and corrected footage side by side, then adjust the correction strength for each scene. Select a stable reference area when moving subjects make whole-frame measurements less useful.
 
 • Compare original and corrected previews before exporting.
+• Loop a selected scene to review correction over time.
 • Detect and refine scene boundaries with a zoomable timeline.
 • Choose Smooth flicker to retain gradual lighting changes, or Steady scene for more consistent exposure.
 • Save editable projects and reopen them later with your original source video.
@@ -44,7 +45,17 @@ Reduce exposure flicker, compare corrections side by side, and save editable pro
 
 ## Review notes
 
-See the App Review notes in ../RELEASING.md. No login is needed. Help → Open Demo Video provides original, silent sample footage for analysis, preview and export. The privacy policy is available from Help → Privacy Policy and the Help window.
+FrankLuma processes SDR video locally. No login, network service or additional hardware is needed.
+
+1. Choose Help → Open Demo Video, or Try the included demo in the empty window. The silent geometric demo is original footage included for review.
+2. Choose Detect scenes & analyse. Select Side by side and press Play to compare the alternating exposure with the corrected preview.
+3. Select a timeline frame and choose Split at playhead to create a scene. Enable Loop scene to repeat the selected scene. Pause playback and adjust correction strength in the inspector.
+4. Choose Save Project to save editable settings. Projects reference the selected source video; they do not embed it.
+5. Choose Export corrected video and select an output file in the macOS Save panel. H.264 and HEVC support MP4 and QuickTime; ProRes 422 supports QuickTime. The source is not changed.
+
+The app uses App Sandbox with user-selected file access and read-only source bookmarks. It has no accounts, advertising, tracking, analytics or in-app purchases. The privacy policy is available from Help → Privacy Policy.
+
+HDR, protected media and dimensions above 4096 pixels on either side are intentionally rejected with an explanation. Export re-encodes SDR video; codec availability depends on macOS. The demo is silent, so no audio is expected from that demo.
 
 ## Privacy and compliance answers to confirm in App Store Connect
 

@@ -16,6 +16,8 @@ The bundle identifier has a valid Mac App Store provisioning profile, confirmed 
 
 ## Local build and tests
 
+The current Store archive and remaining account steps are documented in `docs/app-store/HANDOFF.md`. `scripts/archive-app.sh app-store` verifies the archive against the current source version and prepared assets before attempting export.
+
 The current local build is **1.0.0 (build 7)**. The marketing version is the public release version; increment the build number for each new App Store Connect upload. Use 1.0.1 for a subsequent bug-fix release and 1.1.0 for a subsequent feature release. Both fields feed the app's Info.plist and standard About panel from `Configuration/Base.xcconfig`.
 
 ```sh

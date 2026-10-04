@@ -1,12 +1,12 @@
-# Submission status — 1.0.0 (6)
+# Submission status — 1.0.0 (7)
 
 ## Current result — 5 October 2026
 
-The reviewed source passes all 77 hosted tests. The final universal App Store archive builds successfully, but export is blocked by Xcode reporting **No Accounts** and **No signing certificate “Mac Installer Distribution” found** for team `PLQG3PMFP8`. The final build 6 export attempt gives the same result. No build 6 Store package, upload or review submission exists. The old build 3 package must not be uploaded for this source.
+The reviewed source passes all 79 hosted tests. The final universal App Store archive builds successfully, but export is blocked by Xcode reporting **No Accounts** and **No signing certificate “Mac Installer Distribution” found** for team `PLQG3PMFP8`. The current build 7 export attempt gives the same result. No build 7 Store package, upload or review submission exists. The old build 3 package must not be uploaded for this source.
 
-Archive: `.release/app-store-20261005-101753/FrankLuma.xcarchive`. The archived app has bundle ID `com.sam.frankluma`, version 1.0.0 (6), macOS 14 minimum, both architectures, sandbox/bookmark/user-selected-file entitlements, and no debug entitlement. Its signature verifies; the original demo and privacy manifest are present.
+Archive: `.release/app-store-20261005-103102/FrankLuma.xcarchive`. The archived app has bundle ID `com.sam.frankluma`, version 1.0.0 (7), macOS 14 minimum, both architectures, sandbox/bookmark/user-selected-file entitlements, and no debug entitlement. Its signature verifies; the original demo and privacy manifest are present.
 
-Developer ID build 5 also archives and exports successfully at `.release/developer-id-20261005-011250/export/FrankLuma.app`. Its notarisation attempt cannot find the previously working `TonepebbleNotary` profile in the current Keychain context. The verified notarised build 4 remains at `dist/FrankLuma.app` and `dist/FrankLuma-1.0.0-build-4.dmg`; it predates the cancellation fix. Build 6 is available for local testing at `dist/local/FrankLuma.app`; it is ad-hoc signed, not a notarised release.
+Developer ID build 5 also archives and exports successfully at `.release/developer-id-20261005-011250/export/FrankLuma.app`. Its notarisation attempt cannot find the previously working `TonepebbleNotary` profile in the current Keychain context. The verified notarised build 4 remains at `dist/FrankLuma.app` and `dist/FrankLuma-1.0.0-build-4.dmg`; it predates the cancellation fix. Build 7 is available for local testing at `dist/local/FrankLuma.app`; it is ad-hoc signed, not a notarised release.
 
 ## Issues addressed
 
@@ -14,7 +14,9 @@ Developer ID build 5 also archives and exports successfully at `.release/develop
 - Local development builds previously overwrote the signed default app and merged bundles in place. `scripts/build-app.sh` now verifies a fresh staged bundle and publishes only to `dist/local/FrankLuma.app`, preserving distribution artifacts.
 - Added region-based, exposure-normalised palette comparison with a settled prior shot and three-frame confirmation. The supplied 4K clip now automatically splits the group/single-figure transition at zero-based frame 193 (displayed frame 194), plus three other genuine camera changes. No new cuts were added during continuous Hulk movement.
 - Reanalysis now refreshes untouched automatic cuts, inherits scene settings, and preserves manually reviewed boundaries.
-- Release/listing documentation now identifies build 6 rather than implying the old Store package contains the accepted algorithm.
+- Release/listing documentation now identifies build 7 rather than implying the old Store package contains the accepted algorithm.
+- Added Loop scene playback with real native player regression coverage: repeating the selected scene and pausing pending rewinds.
+- Added an archive preflight that verifies the current version, signing team, release architectures, sandbox, privacy manifest, original demo and four screenshot sizes; verified that it rejects the older build 6 archive. Store archive creation now runs it before export.
 
 ## Ready locally
 
@@ -27,9 +29,11 @@ Developer ID build 5 also archives and exports successfully at `.release/develop
 
 Use https://broadframestudio.com/frankluma/privacy/ and https://broadframestudio.com/frankluma/help/ in App Store Connect. Support is support@broadframestudio.com; mailbox delivery has not been tested.
 
+See HANDOFF.md for the exact archive/export commands and the prepared listing/review material.
+
 ## Account steps that currently block submission
 
-1. Sign into the developer account in Xcode → Settings → Accounts, select team `PLQG3PMFP8`, and resolve the Store installer signing certificate/cloud signing. Re-export the existing build 5 archive; no new archive is needed solely to restore credentials.
+1. Sign into the developer account in Xcode → Settings → Accounts, select team `PLQG3PMFP8`, and resolve the Store installer signing certificate/cloud signing. Re-export the verified build 7 archive using the commands in HANDOFF.md; no new archive is needed solely to restore credentials.
 2. Confirm/create the macOS FrankLuma record for `com.sam.frankluma`. Enter required review contact name, email and phone.
 3. Confirm applicable paid-app agreements, tax/banking and regional trader disclosures. The account holder must accept binding agreements.
 4. Enter version 1.0.0, Video category, A$19.99 Australian price, intended regions, LISTING.md copy, live URLs and screenshots.
@@ -40,7 +44,7 @@ TestFlight is optional. Developer ID notarisation is for direct distribution and
 
 ## Validation and remaining risks
 
-All 77 hosted tests pass, zero failures/skips: `.build/release-tests/Logs/Test/.build/release-tests/Logs/Test/Test-FrankLuma-2026.10.05_10-17-51-+1100.xcresult`. Four licensed/derived short practice inputs successfully analyse, preview, export and reanalyse, preserving source frames/dimensions/duration. A real ten-minute 640×360/25 fps file completes decoding, correction, export and reanalysis with all 15,000 frames and 600 seconds preserved. Analysis plus correction takes 37.66 seconds on this Mac; export is excluded from that timing. It repeats one clip and does not establish 4K production-footage performance.
+All 79 hosted tests pass, zero failures/skips: `.build/release-tests/Logs/Test/Test-FrankLuma-2026.10.05_10-31-25-+1100.xcresult`. Four licensed/derived short practice inputs successfully analyse, preview, export and reanalyse, preserving source frames/dimensions/duration. A real ten-minute 640×360/25 fps file completes decoding, correction, export and reanalysis with all 15,000 frames and 600 seconds preserved. Analysis plus correction takes 37.66 seconds on this Mac; export is excluded from that timing. It repeats one clip and does not establish 4K production-footage performance.
 
 The final 4K verification detects 14 automatic cuts / 15 scenes and preserves all 212 frames, 3840×2160 dimensions and 17.667-second duration through export/reanalysis. The three-frame local-flash practice clip remains one scene; its 596 frames are preserved. The deliberately extreme whole-frame exposure variant adds false cuts in the near-black credit transition (297, 298, 314); the paper-animation portion retains its original boundary at 293. Automatic cuts are editable; this remains a detection limitation, not a claim of complete correction. See `../../PracticeFootage/README.md` for attributions, severity labels and reproducible audit tools. Practice files are not bundled in the app or screenshots.
 

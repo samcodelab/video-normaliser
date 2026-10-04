@@ -21,6 +21,9 @@ mkdir -p "$OUTPUT"
 xcodebuild -project FrankLuma.xcodeproj -scheme "$SCHEME" \
   -destination 'generic/platform=macOS' -derivedDataPath "$PWD/.build/xcode-release" \
   -archivePath "$OUTPUT/FrankLuma.xcarchive" "${PROVISIONING_ARGS[@]}" archive
+if [[ "$CHANNEL" == app-store ]]; then
+  python3 scripts/verify-store-archive.py "$OUTPUT/FrankLuma.xcarchive"
+fi
 xcodebuild -exportArchive -archivePath "$OUTPUT/FrankLuma.xcarchive" \
   -exportOptionsPlist "$OPTIONS" -exportPath "$OUTPUT/export" "${PROVISIONING_ARGS[@]}"
 if [[ "$CHANNEL" == developer-id ]]; then
