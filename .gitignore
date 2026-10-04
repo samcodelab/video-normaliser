@@ -1,0 +1,32 @@
+# SwiftPM and generated application/validation outputs
+/.build/
+/.swiftpm/
+/dist/
+/DerivedData/
+
+# Xcode user settings
+xcuserdata/
+*.xcuserstate
+
+# Local video inputs and exports (keep large media out of Git)
+*.mov
+*.MOV
+*.mp4
+*.MP4
+*.m4v
+*.rgb
+
+# Python validation caches and environments
+__pycache__/
+*.py[cod]
+/.venv/
+/venv/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+
+# macOS metadata
+.DS_Store
+._*
