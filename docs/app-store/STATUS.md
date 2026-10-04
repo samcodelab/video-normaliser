@@ -18,6 +18,10 @@ The current source includes original-frame regional brightness targets, motion/c
 
 The existing Store package predates these changes. Create and validate a new numbered archive/export before uploading; do not use the old build 3 package as evidence for the updated source. Correction stress tests cover a 20-minute analysis workload, not decoding/exporting a real 20-minute 4K source. See the performance verification notes in `docs/RELEASING.md`.
 
+## Experimental correction preview
+
+The `experiment/material-aware-patch-tone` branch adds a separate material-guided patch renderer and rendered-pixel regression. It improves the measured chest/Hulk pulses in the supplied scene, but some face regions still flicker and slightly worsen; it is not ready to replace the default algorithm or support a claim of full correction. Its separate app is `.build/material-preview/Build/Products/Release/FrankLuma.app`. See the complete regional comparison in `docs/RELEASING.md`. The existing main app is retained; this preview is not a Store archive.
+
 ## Live website verified — 4 October 2026
 
 Both pages now return HTTP 200 over HTTPS. The index.html URLs redirect with HTTP 308 to the canonical trailing-slash URLs. The privacy policy matches local processing, project/bookmark metadata and recovery storage; both pages provide support@broadframestudio.com. Use these canonical URLs in App Store Connect:

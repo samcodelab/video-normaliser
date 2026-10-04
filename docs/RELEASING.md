@@ -214,3 +214,29 @@ Verification reproduced Smooth flicker, 0.5-second radius, 100% strength/spatial
 All 71 hosted tests passed, including a new dark textured subject flash beside a moving foreground region, both correction modes, existing camera translation and occlusion tests, serial/parallel equivalence, and native exports. Evidence: `.build/release-tests/Logs/Test/Test-FrankLuma-2026.10.04_23-17-10-+1100.xcresult`. The optimized Release app builds successfully. The new ignored Smooth flicker review MP4 preserves 3840×2160, 17.667 seconds and all 212 frames. Source footage and generated images remain uncommitted under `.build/performance/`.
 
 The final optimized correction stress run took 1.34/1.01/0.91 seconds for initial/radius/mode calculations on 720 frames, and 24.60/20.32/18.36 seconds on 14,400 frames. These synthetic repeated-thumbnail workloads exclude decoding/export and are local observations under concurrent load. The additional texture checks cost some CPU time; main-thread responsiveness and bounded worker preparation are retained.
+
+
+### Material-aware patch tone preview — 5 October 2026
+
+The user's playback review confirmed that the previous correction was insufficient. Investigation found two additional limits: saturated/dark texture bypassed the fitted affine contrast map, and a coarse gain/offset map could match average brightness without matching the texture's actual contrast. A new rendered-pixel regression exposed that mismatch; increasing coarse contrast weighting was rejected because it failed both the new regression and an existing spatial test.
+
+This experimental branch keeps matched affine estimates, original-frame chromaticity and measured within-patch colour spread on the 24×14 patch grid. Confidence-weighted interpolation excludes unsupported/occluded cells. Source-colour guidance limits spill across materials. Uniform matched surfaces use their direct patch targets; mixed dark printed regions blend towards the shared contrast fit, while heterogeneous bright regions retain more of the conservative map. Near-black and near-clipped pixels fade the new path, RGB is still multiplied by a common gain, and highlights remain bounded. No source pixels from other frames are blended. The existing coarse map remains the fallback. Camera/scene/radius restrictions and bounded workers remain in place; the new stored patch descriptors increase memory and CPU costs.
+
+Five actual 4K previews (displayed frames 186–190) were measured using the user's Smooth flicker mode, 0.5-second radius, full strength/spatial correction and scene 181–193. The table shows each fixed rectangle's max/min linear-light brightness variation across those five frames, comparing main's `aaa3c75` with this preview. It is not a whole-image or playback quality score.
+
+| Sampled area | Previous variation | Preview variation |
+| --- | ---: | ---: |
+| Blue background | 2.69% | 2.69% |
+| Floor | 2.43% | 1.69% |
+| Iron Man face | 4.34% | 6.00% |
+| Iron Man chest | 21.75% | 7.20% |
+| Hulk | 8.48% | 3.15% |
+| Thor | 7.16% | 5.66% |
+| Black Widow | 5.69% | 7.06% |
+| Hawkeye | 9.41% | 6.55% |
+
+The chest, Hulk and some background areas improve, but face areas remain imperfect and two sampled regions worsen slightly. This is an experimental preview, not a complete flicker fix or a release-quality claim. Keep it separate from the default build pending visual review and further material separation within small mixed patches. The separate optimized app is `.build/material-preview/Build/Products/Release/FrankLuma.app`; the previous app in `.build/performance-release/` is retained. Private footage, rendered images, measurement scripts and review movies remain ignored under `.build/performance/`.
+
+The final hosted suite passes all 73 tests, including native black/colour/highlight protection, a rendered-pixel contrast regression, cached/parallel patch equivalence, and codec/audio/timing exports. Evidence: `.build/release-tests/Logs/Test/Test-FrankLuma-2026.10.05_00-26-19-+1100.xcresult`. The optimized preview build succeeds.
+
+The final corrected-only preview movie preserves 3840×2160, 17.667 seconds and all 212 frames. Native live composition uses 1/12-second frames for this 12 fps source, so an accidental 30 fps preview cadence is not the cause. The optimized correction-only stress run took 1.40/1.13/1.03 seconds for initial/radius/mode calculations on 720 frames, and 27.53/22.71/20.79 seconds on 14,400 frames. This repeated-thumbnail benchmark excludes decoding/export; the extra patch descriptors add processing and stored memory, while the UI-thread and bounded-worker protections remain.

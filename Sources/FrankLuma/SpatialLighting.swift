@@ -18,12 +18,22 @@ struct SpatialAlignment: Sendable, Codable {
     let accepted: Bool
 }
 
+struct SpatialPatchTone: Sendable, Codable, Equatable {
+    var stops: [Double]
+    var offsets: [Double]
+    var red: [Double]
+    var green: [Double]
+    var confidence: [Double]
+    var colourTolerance: [Double]? = nil
+}
+
 struct SpatialField: Sendable, Codable {
     var columns = 9
     var rows = 6
     var stops = [Double](repeating: 0, count: 54)
     var offsets = [Double](repeating: 0, count: 54)
     var exposureStops = [Double](repeating: 0, count: 54)
+    var patchTone: SpatialPatchTone? = nil
     var sampleColumns = 24
     var sampleRows = 14
     var confidence = [Double](repeating: 0, count: 336)
@@ -244,6 +254,8 @@ enum SpatialLighting {
             }
             var offsetTargets = [Double](repeating: 0, count: field.confidence.count)
             var spreads = offsetTargets
+            var toneWeights = offsetTargets
+            var patchRed = offsetTargets, patchGreen = offsetTargets, colourTolerance = offsetTargets
             for row in 0..<field.sampleRows { for col in 0..<field.sampleColumns {
                 let index = row * field.sampleColumns + col
                 let nx = (Double(col) + 0.5) / Double(field.sampleColumns)
@@ -252,8 +264,16 @@ enum SpatialLighting {
                 let x = min(w-3, max(2, Int(nx * Double(w))))
                 let y = min(h-3, max(2, Int(ny * Double(h))))
                 var gains: [Double] = [], matchedMeans: [Double] = [], alignedMeans: [Double] = [], weights: [Double] = []
+                var texturedMatches = 0
                 let patch = (-2...2).flatMap { dy in (-2...2).map { dx in frames[i]!.luminance[(y+dy)*w+x+dx] } }
                 let current = patch.reduce(0,+)/Double(patch.count)
+                patchRed[index] = ExposureMath.median((-2...2).flatMap { dy in (-2...2).map { dx in frames[i]!.red[(y+dy)*w+x+dx] } })
+                patchGreen[index] = ExposureMath.median((-2...2).flatMap { dy in (-2...2).map { dx in frames[i]!.green[(y+dy)*w+x+dx] } })
+                let colourErrors = (-2...2).flatMap { dy in (-2...2).map { dx in
+                    let p = (y+dy)*w+x+dx
+                    return abs(frames[i]!.red[p]-patchRed[index])+abs(frames[i]!.green[p]-patchGreen[index])
+                } }.sorted()
+                colourTolerance[index] = min(0.30,colourErrors[22])
                 spreads[index] = sqrt(patch.map { pow($0-current,2) }.reduce(0,+)/Double(patch.count))
                 field.before[index] = current
                 for alignment in accepted {
@@ -265,6 +285,7 @@ enum SpatialLighting {
                         matchedMeans.append(mean)
                         alignedMeans.append(mean*pow(2,global[j]))
                         weights.append(match.confidence)
+                        if match.textured { texturedMatches += 1 }
                     }
                 }
                 let fraction = Double(gains.count) / Double(accepted.count)
@@ -292,6 +313,7 @@ enum SpatialLighting {
                 field.requested[index] = max(-0.75, min(0.75, residual))
                 offsetTargets[index] = desired - current * pow(2, global[i] + field.requested[index])
                 field.reference[index] = desired
+                if texturedMatches >= 2 { toneWeights[index] = confidence*Double(texturedMatches)/Double(gains.count) }
 
             } }
             // Erode uncertain boundary patches beside motion/occlusion. A patch
@@ -313,6 +335,15 @@ enum SpatialLighting {
                 field.fallback = "Insufficient unoccluded background support"
                 result.append(field); continue
             }
+            // Keep verified affine maps at patch resolution for uniform surfaces.
+            // Coarse gain/offset fitting can match a patch mean while losing its
+            // contrast; source-colour guidance in the renderer protects edges.
+            let patchConfidence = field.confidence.indices.map { p in
+                field.confidence[p] > 0.25 && toneWeights[p] > 0.25 ? min(1,toneWeights[p]/0.5) : 0
+            }
+            field.patchTone = SpatialPatchTone(
+                stops: field.requested.map { $0*strength }, offsets: offsetTargets.map { $0*strength },
+                red: patchRed, green: patchGreen, confidence: patchConfidence, colourTolerance: colourTolerance)
             var exposureField = field
             exposureField.requested = field.requested.indices.map { p in
                 log2(max(0.25, pow(2,field.requested[p]) + offsetTargets[p] / max(0.02,field.before[p]*pow(2,global[i]))))
@@ -431,9 +462,9 @@ enum SpatialLighting {
         return covariance/sqrt(va*vb)
     }
 
-    private static func compare(_ a: Frame, _ b: Frame, x: Int, y: Int, dx: Int, dy: Int) -> (delta: Double, offset: Double, confidence: Double) {
+    private static func compare(_ a: Frame, _ b: Frame, x: Int, y: Int, dx: Int, dy: Int) -> (delta: Double, offset: Double, confidence: Double, textured: Bool) {
         let w=a.thumb.width,h=a.thumb.height
-        guard x+dx>=2, x+dx<w-2, y+dy>=2, y+dy<h-2 else { return (0,0,0) }
+        guard x+dx>=2, x+dx<w-2, y+dy>=2, y+dy<h-2 else { return (0,0,0,false) }
         var ratios:[Double]=[], colours:[Double]=[], pairs:[(Double, Double)]=[]
         for yy in -2...2 { for xx in -2...2 {
             let p=(y+yy)*w+x+xx, q=(y+yy+dy)*w+x+xx+dx
@@ -445,7 +476,7 @@ enum SpatialLighting {
             pairs.append((a.luminance[p], b.luminance[q]))
             colours.append(abs(a.red[p]-b.red[q])+abs(a.green[p]-b.green[q]))
         } }
-        guard ratios.count>=12 else { return (0,0,0) }
+        guard ratios.count>=12 else { return (0,0,0,false) }
         let delta=ExposureMath.median(ratios)
         let residual=ExposureMath.median(ratios.map { abs($0-delta) })
         let colour=ExposureMath.median(colours)
@@ -456,8 +487,8 @@ enum SpatialLighting {
         let covarianceAB = pairs.map { ($0.0-meanA)*($0.1-meanB) }.reduce(0,+)
         let correlation = varianceA > 0.0005 && varianceB > 0.0005 ? covarianceAB/sqrt(varianceA*varianceB) : 0
         let sameTexture = correlation > 0.97 && colour < 0.12
-        guard ratios.count >= 18 || sameTexture else { return (delta,0,0) }
-        guard colour < 0.055 || sameTexture else { return (delta,0,0) }
+        guard ratios.count >= 18 || sameTexture else { return (delta,0,0,false) }
+        guard colour < 0.055 || sameTexture else { return (delta,0,0,false) }
         // Estimate the gain from matched linear-light energy, rather than
         // the median pixel ratio. The latter overweights dark crevices on
         // textured surfaces and can turn a dark floor frame into a bright one.
@@ -468,7 +499,7 @@ enum SpatialLighting {
             let weight = min(1, max(0.08, 3*residual) / max(0.000001, abs(ratios[index]-delta)))
             source += weight * pair.0; target += weight * pair.1; support += weight
         }
-        guard support >= (sameTexture ? 12 : 18), source > 0 else { return (delta, 0, 0) }
+        guard support >= (sameTexture ? 12 : 18), source > 0 else { return (delta, 0, 0,false) }
         let scalar = target/source
         var gain = scalar, offset = 0.0
         // A diffuse-light change can affect bright studs and dark recesses
@@ -489,10 +520,10 @@ enum SpatialLighting {
             }
         }
         let fitResidual = ExposureMath.median(pairs.map { abs($0.1 - (gain*$0.0+offset)) / max(0.02,$0.1) })
-        guard fitResidual < 0.07 || (sameTexture && fitResidual < 0.15) else { return (delta,0,0) }
+        guard fitResidual < 0.07 || (sameTexture && fitResidual < 0.15) else { return (delta,0,0,false) }
         let ordinary = max(0,1-fitResidual/0.09)*max(0,1-colour/0.065)
         let structural = sameTexture ? 0.8*max(0,1-fitResidual/0.2) : 0
-        return (log2(gain),offset,max(ordinary,structural))
+        return (log2(gain),offset,max(ordinary,structural),sameTexture)
     }
 
     /// Fit gain and offset together: every background patch constrains its

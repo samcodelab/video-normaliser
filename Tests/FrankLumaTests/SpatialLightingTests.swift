@@ -45,6 +45,7 @@ final class SpatialLightingTests: XCTestCase {
         for i in samples.indices {
             XCTAssertEqual(reused[i].stops, fresh[i].stops)
             XCTAssertEqual(reused[i].offsets, fresh[i].offsets)
+            XCTAssertEqual(reused[i].patchTone, fresh[i].patchTone)
             XCTAssertEqual(reused[i].fallback, fresh[i].fallback)
             XCTAssertEqual(reused[i].alignments.map(\.reference), fresh[i].alignments.map(\.reference))
         }
@@ -62,6 +63,7 @@ final class SpatialLightingTests: XCTestCase {
             for i in serial.indices {
                 XCTAssertEqual(fields[i].stops, serial[i].stops)
                 XCTAssertEqual(fields[i].offsets, serial[i].offsets)
+                XCTAssertEqual(fields[i].patchTone, serial[i].patchTone)
                 XCTAssertEqual(fields[i].alignments.map(\.reference), serial[i].alignments.map(\.reference))
             }
         }
