@@ -2,11 +2,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "VideoNormaliser",
+    name: "FrankLuma",
     platforms: [.macOS(.v14)],
-    products: [.executable(name: "VideoNormaliser", targets: ["VideoNormaliser"])],
+    products: [.executable(name: "FrankLuma", targets: ["FrankLuma"])],
     targets: [
-        .executableTarget(name: "VideoNormaliser"),
-        .testTarget(name: "VideoNormaliserTests", dependencies: ["VideoNormaliser"], resources: [.copy("Fixtures")])
+        .executableTarget(name: "FrankLuma"),
+        .testTarget(name: "FrankLumaTests", dependencies: ["FrankLuma"], resources: [.copy("Fixtures")])
     ]
 )

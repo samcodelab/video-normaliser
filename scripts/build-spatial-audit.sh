@@ -9,10 +9,10 @@ CLANG_MODULE_CACHE_PATH="$PWD/.build/ModuleCache" swiftc \
   -parse-as-library -O -target arm64-apple-macosx14.0 -swift-version 5 \
   -Xfrontend -disable-sandbox -suppress-warnings \
   -module-cache-path "$PWD/.build/ModuleCache" \
-  Sources/VideoNormaliser/Exposure.swift Sources/VideoNormaliser/Scenes.swift \
-  Sources/VideoNormaliser/PatchExposure.swift Sources/VideoNormaliser/SpatialLighting.swift \
-  Sources/VideoNormaliser/SpatialRenderer.swift Sources/VideoNormaliser/VideoGeometry.swift \
-  Sources/VideoNormaliser/VideoEngine.swift Sources/VideoNormaliser/VideoExporter.swift \
+  Sources/FrankLuma/Exposure.swift Sources/FrankLuma/Scenes.swift \
+  Sources/FrankLuma/PatchExposure.swift Sources/FrankLuma/SpatialLighting.swift \
+  Sources/FrankLuma/SpatialRenderer.swift Sources/FrankLuma/VideoGeometry.swift \
+  Sources/FrankLuma/VideoEngine.swift Sources/FrankLuma/VideoExporter.swift \
   scripts/validation/SpatialAudit.swift \
   -o '.build/Spatial Final Audit.app/Contents/MacOS/Audit'
 cat > '.build/Spatial Final Audit.app/Contents/Info.plist' <<'PLIST'

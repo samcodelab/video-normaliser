@@ -1,10 +1,12 @@
-# Video Normaliser
+# FrankLuma
 
 A native macOS app that reduces exposure flicker in stop-motion videos. Built with SwiftUI, AVKit, AVFoundation, and Core Image. No third-party dependencies or uploads.
 
+Historical validation sections below retain the old Video Normaliser name and artifact filenames.
+
 ## Open the app
 
-Open `dist/Video Normaliser.app`. You can also copy that app to Applications. The included build is for Apple silicon, requires macOS 14 or later, and is locally signed for development rather than notarised for distribution.
+Open `dist/FrankLuma.app`. You can also copy that app to Applications. The local build supports Apple silicon and Intel, requires macOS 14 or later, and is ad-hoc signed for development. Developer ID and App Store release schemes are available in `FrankLuma.xcodeproj`.
 
 1. Open or drop a video into the window, then click **Detect scenes & analyse**.
 2. Click or drag on the exposure graph to scrub. The white playhead, frame number, preview, and selected scene stay in sync. Use **← / →** to step exactly one source frame and **Space** to play or pause. First/last-frame buttons are beside the transport controls.
@@ -17,11 +19,13 @@ Open `dist/Video Normaliser.app`. You can also copy that app to Applications. Th
 
 The exposure graph shows a **dashed cyan original** line and a **solid green corrected** line on one EV scale. Both use the same original median baseline within each scene and that scene's selected reference measurement. Original exposure is the median change across the selected stable patches. The corrected line is the predicted original exposure plus the global correction; local corrections appear in the diagnostic preview. It is not a second measurement of the encoded export. Lines break at scene boundaries.
 
+**Timeline zoom:** hold **⌘** and use the mouse wheel, or pinch on the trackpad, to zoom around the pointer (matching TonePebble). Scroll to pan, or use the range slider. The magnifier buttons also zoom; **Fit** restores the whole clip. At close zoom, alternating vertical slices mark actual source frames, with frame numbers when space permits. Click within a slice to select that frame; orange cuts still snap to frame boundaries.
+
 **This frame** shows the correction at the playhead in exposure stops: positive brightens and negative darkens. This is the global component used for preview and export; spatial correction adds a position-dependent adjustment. Many frames need only small adjustments. For a constant exposure target, choose **Steady scene**; Smooth flicker deliberately preserves gradual changes.
 
 **Side by side** displays original on the left and corrected on the right, rendered from the same source frame in one player. Scrubbing, frame stepping, and playback share a single timeline and audio track. Select reference areas on the left image. Export always produces a single corrected video at the original dimensions, regardless of the comparison view.
 
-Re-analysis preserves manual boundaries and settings when the source frame timestamps are unchanged. A 0.5-second radius is a starting point; larger radii smooth slower fluctuations. Settings and boundaries are held in memory for the current session; project saving is not yet included.
+Re-analysis preserves manual boundaries and settings when the source frame timestamps are unchanged. A 0.5-second radius is a starting point; larger radii smooth slower fluctuations. Settings and boundaries are held in memory for the current session; project saving is not yet included. Opening another clip, closing or quitting prompts before discarding an analysed session. Help → FrankLuma Help explains supported formats and controls; Help → Open Demo Video loads an original built-in sample. SDR only, up to 4096 pixels per side; HDR and protected sources must be converted first. Exports are re-encoded H.264 QuickTime movies, not lossless copies.
 
 ## Build
 
@@ -31,7 +35,7 @@ Requires Xcode and its command-line tools. Run:
 zsh scripts/build-app.sh
 ```
 
-The script builds an optimised executable, assembles the `.app` bundle in `dist`, and applies an ad-hoc signature. Open `Package.swift` in Xcode to work on the source.
+The script builds the universal sandboxed app through Xcode and copies it to `dist/FrankLuma.app` with an ad-hoc signature. Open `FrankLuma.xcodeproj` in Xcode to run, test or archive. See [release and signing instructions](docs/RELEASING.md) for Developer ID, notarisation and App Store distribution. `Package.swift` remains available for command-line development.
 
 ## Tests
 
@@ -175,3 +179,21 @@ See [the regional audit](dist/Energy%20validation/report.html) for full results 
 `dist/Video Normaliser — Estimator Preview.mov` is a separately named software-rendered review artifact; it is not a native app export. Its 86 video timestamps/durations, 12 fps, orientation, and all 315 audio payloads/timestamps/durations match the landscape source. Inputs remain untouched. Software thumbnail resampling and colour conversion differ from Core Image, so these measurements must not be presented as verified native-output results.
 
 Audit helpers in `scripts/validation/` decode through locally installed FFmpeg libraries using x86_64 Python, fit cached frames with the production Swift estimator, render a controlled CPU comparison and measure several regions per shot. `software_light.c` is audit-only code. Full source/output patch coordinates and measurements, fitted/requested gains and colour-ratio diagnostics are saved in `dist/Energy validation/`.
+
+### Native tone correction audit (4 October 2026)
+
+The user's UI frames 13–15 exposed a failure that region averages concealed. In the centre floor of the old native paused preview, frame 14's bright P90 was 248.5 while neighbouring frames were 227.8/225.6; its dark P10 was 125.8 versus 140.9/141.6. The average was already similar. Exposure-only correction cannot simultaneously match both ends of that distribution.
+
+The spatial matcher now considers a constrained affine luminance fit when textured correspondences support a substantially better fit than scalar exposure. Gain and offset are fitted jointly over the spatial grid so each patch constrains both its mean and contrast. Deep shadows and strongly coloured pixels use an exposure-only field; neutral midtones receive the tone adjustment. RGB channels still share one multiplier. No white-balance estimator or independent RGB adjustment was added. Temporal correspondence, scene isolation and confidence fallback remain; this is not a whole-shot temporal optimisation or a claim that reference switching is solved.
+
+The revised native paused preview's centre-floor P90 at frame 14 is 232.2 and P10 is 140.2. The diagnostic field now visualises effective per-pixel gain, including tone mapping and highlight protection, rather than just the fitted exposure component. The timeline remains explicitly global-only.
+
+The native export is `dist/Video Normaliser — Tone Corrected.mov`. See [the full native audit](dist/Tone%20validation/report.html), including all 86 before/after frame pairs and full-resolution regional measurements. Both baseline and revised movies were exported through production AVFoundation/Core Image code, using the landscape source, Smooth flicker, 0.5 s, strengths 100%, and reviewed zero-based boundaries 11/18/38/50.
+
+In scene 2, native exported floor P90 adjacent-frame RMS changes from **16.08 → 1.23** (left), **14.02 → 3.59** (centre), and **17.86 → 1.61** (right), in 0–255 sRGB luma. Dark P10 RMS improves from 12.03 → 2.33, 10.14 → 2.08 and 7.04 → 3.79 respectively. The left-floor mean RMS regresses **1.37 → 3.10**, and centre-floor mean RMS regresses 1.11 → 1.78. These remain real defects despite the reduced contrast pulse. Final-shot floor mean RMS also increases 0.53 → 0.71. Blue-background residuals and camera-move limitations remain. This is not a complete flicker-removal acceptance pass.
+
+All 86 video packet timestamps and durations match the source; dimensions remain 3840 × 2160 at 12 fps. All 315 audio packet timestamps, durations and compressed payload hashes match. All frame pairs were inspected in contact sheets without obvious new seams or duplicated poses at that size. Full-resolution continuous perceptual playback needs human review.
+
+42 tests pass in a native-service-enabled shell, including the real-video integration test, an additive-light/texture regression, and renderer tests for black preservation, saturated colours, linear chromaticity and highlight limits. The integration timing helper now ignores zero-sample compressed-reader markers and derives omitted media durations from presentation intervals; it asserts 48 actual video samples. Restricted shells cannot reliably run Core Image/AVFoundation tests.
+
+Reproduction: `zsh scripts/build-consistency-audit.sh`, then `.build/consistency/audit <source.mov> <new-output-directory> --export`. This clip-specific harness uses the reviewed boundaries above. `.build/consistency/measure <movie> <output-directory>` decodes full-resolution native exports and records regional means, P10/P90, colour ratios and near-white fractions. `scripts/validation/check_consistency_media.py <source> <export>` independently checks packets with the locally installed ffprobe. The report generator consumes `dist/Tone validation/before.json` and `after.json`.

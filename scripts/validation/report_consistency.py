@@ -1,0 +1,20 @@
+"""Report native before/after exports; all table frames use UI numbering."""
+import json,math,pathlib,html
+root=pathlib.Path('dist/Tone validation')
+a,b=[json.loads((root/(name+'.json')).read_text()) for name in ['before','after']]
+def rms(d,start,end,k,metric):
+ v=[d[i]['regions'][k][metric] for i in range(start,end)]
+ return math.sqrt(sum((x-y)**2 for x,y in zip(v,v[1:]))/(len(v)-1))
+text='''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Native tone correction audit</title><style>body{font:16px system-ui;max-width:1200px;margin:40px auto;padding:0 24px;color:#222;background:#fafafa}table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th,td{text-align:left;border-bottom:1px solid #ddd;padding:9px}img{max-width:100%}.worse{color:#a43025}small{color:#555}video{max-width:100%;width:900px}</style><h1>Native tone correction audit</h1><p>4 October 2026. The floor flash involved a contrast change: correcting its average alone over-brightened the studs while leaving recesses dark. The revised fit estimates local gain and luminance offset together, with exposure-only fallback for deep shadows and strongly coloured pixels.</p><p>Both columns are native app exports of the same source using Smooth flicker, 0.5 s, 100% strength, 100% spatial correction and reviewed cuts at zero-based frames 11/18/38/50. These measurements use full-resolution decoded sRGB pixels. P10/P90 are the dark/bright ends of each region's luminance distribution. Lower adjacent-frame RMS is better; they do not identify precisely the same physical pixel across frames.</p><p><strong>Improvement, with remaining failures:</strong> the bright-floor pulse is substantially reduced. Left-floor mean variation in scene 2 worsens even though its shadow and highlight variation improves. The final shot's floor mean also regresses slightly. Blue-background variation and camera-move limitations remain. No white-balance correction was introduced; a common linear RGB multiplier preserves individual pixels' chromaticity before encoding, not necessarily regional colour ratios.</p><p>42 tests passed, including native rendering, shadows, colour ratios, highlight limits, moving subjects and real-video export. All 86 video timestamps/durations and all 315 audio timestamps/durations/payload hashes match the source. Full-sized contact sheets were inspected for all frames; continuous perceptual playback still needs human review.</p><p><a href="../Video%20Normaliser%20%E2%80%94%20Tone%20Corrected.mov">Open native corrected movie</a> · <a href="before.json">Before measurements</a> · <a href="after.json">After measurements</a> · <a href="media-checks.json">Media checks</a></p><h2>Scene 2: adjacent-frame variation</h2><table><tr><th>Region</th><th>Mean RMS before → after</th><th>Shadow P10 RMS</th><th>Highlight P90 RMS</th></tr>'''
+for start,end in [(11,18),(0,11),(25,38),(38,50),(50,86)]:
+ if start!=11:text+=f'</table><h2>UI frames {start+1}–{end}</h2><table><tr><th>Region</th><th>Mean RMS</th><th>Shadow P10 RMS</th><th>Highlight P90 RMS</th></tr>'
+ for k,r in enumerate(a[start]['regions']):
+  if (start==25 and r['name']=='right blue') or (start==50 and r['name']=='lower right wall'):continue
+  text+='<tr><td>'+html.escape(r['name'])+'</td>'
+  for metric in ['mean','p10','p90']:
+   before,after=[rms(d,start,end,k,metric) for d in [a,b]]
+   text+=f'<td class="{"worse" if after>before else ""}">{before:.2f} → {after:.2f}</td>'
+  text+='</tr>'
+text+='</table><p>Camera-movement frames 19–25 are excluded from static-region statistics. Two regions visibly crossed by figures are excluded: scene 3 right blue and final-scene lower-right wall. Raw measurements retain them. Units are 0–255 sRGB luma.</p><h2>All frames: previous correction / revised correction</h2>'
+for start in range(0,86,12):text+=f'<p>UI frames {start+1}–{min(start+12,86)}</p><a href="contact-{start}.png"><img loading="lazy" src="contact-{start}.png" alt="Previous and revised native exports, frames {start+1} onward"></a>'
+(root/'report.html').write_text(text+'</html>')

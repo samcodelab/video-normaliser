@@ -15,6 +15,7 @@ xcuserdata/
 *.MP4
 *.m4v
 *.rgb
+!Resources/FrankLuma Demo.mov
 
 # Python validation caches and environments
 __pycache__/
@@ -30,3 +31,9 @@ __pycache__/
 # macOS metadata
 .DS_Store
 ._*
+
+# Machine-specific signing overrides and distribution output
+/Configuration/Local.xcconfig
+/.release/
+*.xcarchive
+*.xcresult
