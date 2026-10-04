@@ -2,7 +2,7 @@ import AVFoundation
 import CoreImage
 import AudioToolbox
 
-enum ExportFormat: String, CaseIterable, Sendable {
+enum ExportFormat: String, CaseIterable, Sendable, Codable {
     case h264MP4, h264MOV, hevcMP4, hevcMOV, proResMOV
 
     var title: String {
@@ -26,12 +26,12 @@ enum ExportFormat: String, CaseIterable, Sendable {
     }
 }
 
-enum ExportQuality: String, CaseIterable, Sendable {
+enum ExportQuality: String, CaseIterable, Sendable, Codable {
     case standard = "Standard", high = "High"
     var bitrateFactor: Double { self == .high ? 0.16 : 0.08 }
 }
 
-struct VideoExportOptions: Sendable {
+struct VideoExportOptions: Sendable, Codable, Equatable {
     var format: ExportFormat = .h264MOV
     var quality: ExportQuality = .high
 

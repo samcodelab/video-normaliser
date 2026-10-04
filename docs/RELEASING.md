@@ -72,10 +72,11 @@ The privacy policy is currently a draft only. Publish it with a support contact 
 
 - `com.apple.security.app-sandbox`
 - `com.apple.security.files.user-selected.read-write`
+- `com.apple.security.files.bookmarks.app-scope` (persistent access to the user-selected source video)
 
 The user grants file access through macOS Open/Save panels, drag-and-drop or Open With. Security-scoped access is retained for playback, analysis, preview and export and released after those operations finish. The source is read only by the app; the read/write entitlement is needed for user-chosen output files. Exports stage in Foundation's item-replacement directory and commit only after encoding succeeds. Failed/cancelled exports leave the existing destination intact. Diagnostics also use a Save panel.
 
-FrankLuma does not record audio/video, access the Photos library, contact network services, use analytics, or request broad folder/Full Disk Access. There are no camera, microphone, Photos, network, automation, executable-memory or library-validation exceptions. Source audio is read from the selected movie; this does not require microphone permission. No persistent security-scoped bookmarks are needed because projects/recent-file restoration are not implemented.
+FrankLuma does not record audio/video, access the Photos library, contact network services, use analytics, or request broad folder/Full Disk Access. There are no camera, microphone, Photos, network, automation, executable-memory or library-validation exceptions. Source audio is read from the selected movie; this does not require microphone permission. Projects and recovery checkpoints retain read-only security-scoped bookmarks for the selected source video. They do not grant access to arbitrary folders. Project files are retained under the Open/Save panel access for subsequent saves.
 
 `Resources/PrivacyInfo.xcprivacy` declares no tracking or collected data. The current source does not directly use required-reason API categories; revisit the manifest whenever adding preferences, file timestamps, disk-space checks, third-party SDKs or telemetry. A privacy manifest does not replace the public privacy policy or App Store privacy questionnaire. `docs/PRIVACY.md` supplies a factual policy draft for publication.
 
@@ -116,7 +117,7 @@ FrankLuma is an offline SDR exposure-flicker correction tool. No account, networ
 
 The demo is original, procedurally generated geometric footage; its generator is `scripts/generate-demo.swift`. It contains no third-party artwork or licensed audio. HDR (PQ/HLG), protected media and dimensions above 4096 pixels on either side are rejected with instructions to make an SDR copy. Codec decoding depends on macOS. Do not advertise lossless export, general white-balance correction or HDR support.
 
-Analysed sessions are held in memory. Opening another video, closing the main window or quitting asks before discarding settings. Exports are saved videos, not editable projects. While a task is running, close/quit asks the user to wait or cancel from the main window first.
+Analysed sessions can be saved as `.frankluma` projects. Opening another video/project, closing the main window or quitting offers Save, Discard or Cancel for unsaved edits. Unsaved edits also have local recovery checkpoints; deliberate discard/closure clears the active checkpoint. Exports are saved videos, not editable projects. While a task is running, close/quit asks the user to wait or cancel from the main window first.
 
 Remaining device/account checks: run the App Store-signed build through TestFlight; exercise actual HDR/iPhone samples, hour-long/high-frame-rate footage, external and removable volumes, real disk-full/permission failures, macOS 14, and Intel hardware. The local automated tests do not replace those checks. The public support email is support@broadframestudio.com and is linked in Help. A live support-page URL for the store listing and published privacy-policy URL still need to be provided before submission.
 
@@ -142,3 +143,9 @@ The disk image contains FrankLuma.app, an Applications shortcut, and Install.txt
 ### Format release checks
 
 Exercise all five export choices with real H.264, SDR HEVC and SDR ProRes sources on macOS 14, Intel and Apple silicon. Verify variable frame timing, rotation, colour, AAC passthrough, PCM-to-AAC conversion, multichannel downmix and audio tails. Verify ProRes gradients retain more than 8-bit precision. HEVC availability is checked by the writer; unsupported exports should report an error without replacing the destination. HDR remains unsupported.
+
+### Project release checks
+
+Verify Save/Open/Save As projects in the sandboxed app, Finder opening, project drag-and-drop, source access across app restarts, bookmark tracking after moving the source, relinking a byte-identical copy, and rejection of a different source. Close/quit must offer Save/Discard/Cancel only for unsaved changes; cancelled saves and failed opens must preserve the session. Force-quit after edits and verify the recovery prompt restores cuts, per-scene reference regions, settings and export preferences. Keep one recovery for later, edit another session, and confirm the earlier recovery survives. Exercise disk-full/permission failures and autosave error reporting.
+
+Local verification for project support: the command-line suite ran 63 tests with 62 passing and the hosted bundled-demo test skipped. A separate sandboxed app (`com.sam.frankluma.projectcheck`) opened a disposable source through the native Open panel, saved an 1,800-byte project, quit and reopened it with source-bookmark access, and restored 55% strength. Editing to 65%, cancelling the close confirmation, then saving retained the edits. Renaming the disposable source and using Relink Source Video preserved the settings and saved the new source location. Recovery reconstruction and independent checkpoint cleanup were exercised by the model integration tests; force-quit recovery and Finder/drop opening still need release-device checks. The production universal sandboxed app builds and its signature verifies.

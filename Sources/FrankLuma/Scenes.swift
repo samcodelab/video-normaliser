@@ -106,12 +106,12 @@ enum SceneMath {
     }
 }
 
-enum NormalisationMode: String, CaseIterable, Sendable {
+enum NormalisationMode: String, CaseIterable, Sendable, Codable {
     case smooth = "Smooth flicker"
     case steady = "Steady scene"
 }
 
-struct ReferenceRegion: Hashable, Sendable {
+struct ReferenceRegion: Hashable, Sendable, Codable {
     let x: Double
     let y: Double
     let width: Double
@@ -122,7 +122,7 @@ struct ReferenceRegion: Hashable, Sendable {
     var rect: CGRect { CGRect(x: x, y: y, width: width, height: height) }
 }
 
-struct SceneSettings: Equatable, Sendable {
+struct SceneSettings: Equatable, Sendable, Codable {
     var strength = 1.0
     var radius = 0.5
     var mode: NormalisationMode = .smooth
@@ -218,7 +218,7 @@ struct ExposureComparison {
     var range: Double { max(0.25, max(original.map(abs).max() ?? 0, corrected.map(abs).max() ?? 0) * 1.15) }
 }
 
-enum PreviewMode: String, CaseIterable {
+enum PreviewMode: String, CaseIterable, Codable, Sendable {
     case original = "Original"
     case corrected = "Corrected"
     case sideBySide = "Side by side"

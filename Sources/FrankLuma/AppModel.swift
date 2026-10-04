@@ -4,7 +4,27 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class AppModel: ObservableObject {
-    @Published var exportOptions = VideoExportOptions(format: .h264MP4)
+    @Published var projectURL: URL?
+    @Published private(set) var projectHasChanges = false
+    @Published private(set) var recoveryAvailable = false
+    @Published private(set) var recoveryWarning: String?
+    @Published var exportOptions = VideoExportOptions(format: .h264MP4) {
+        didSet {
+            if exportOptions != oldValue, !installingProject, result != nil { projectEdited() }
+        }
+    }
+    private let recoveryStore: ProjectRecoveryStore
+    private var recoveryID = UUID()
+    private var checkpointTask: Task<Void, Never>?
+    private var projectAccess: SecurityScopedAccess?
+    private var projectSource: ProjectSource?
+    private var sourceStamp: ProjectSourceStamp?
+    private var installingProject = false
+    private var checkedRecovery = false
+    var projectTitle: String {
+        let name = projectURL?.lastPathComponent ?? url?.lastPathComponent ?? "FrankLuma"
+        return name + (projectHasChanges ? " — Edited" : "")
+    }
     @Published var url: URL?
     @Published var info: VideoInfo?
     @Published var player = AVPlayer()
@@ -67,7 +87,9 @@ final class AppModel: ObservableObject {
         set { changeSettings { $0.mode = newValue } }
     }
 
-    init() {
+    init(recoveryStore: ProjectRecoveryStore = .standard) {
+        self.recoveryStore = recoveryStore
+        recoveryAvailable = !recoveryStore.candidates(excluding: recoveryID).isEmpty
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 30), queue: .main) { [weak self] time in
             Task { @MainActor in
                 guard let self, self.isPlaying else { return }
@@ -114,6 +136,7 @@ final class AppModel: ObservableObject {
     }
 
     func open(_ newURL: URL) {
+        if newURL.pathExtension.lowercased() == "frankluma" { openProject(newURL); return }
         guard !busy else { return }
         guard newURL.isFileURL else {
             error = "Choose a video file on your Mac using Open video."
@@ -132,22 +155,13 @@ final class AppModel: ObservableObject {
                 let info = try await VideoEngine.info(for: asset)
                 try MediaSupport.validate(info)
                 try Task.checkCancellation()
-                self.asset = asset; self.url = newURL; self.info = info
+                finishSession()
+                projectURL = nil; projectAccess = nil; projectSource = nil; sourceStamp = nil
+                recoveryID = UUID(); projectHasChanges = false
                 result = nil; sceneBoundaries = []; sceneSettings = [:]; referenceResults = [:]; stablePatchCounts = [:]
                 selectedSceneStart = 0; curve = .empty; exposureComparison = .empty; defaults.reference = nil
-                selectingRegion = false; exportedURL = nil; stillImage = nil; previewError = nil; playhead = 0
-                previewCorrection.set(.empty)
-                let item = AVPlayerItem(asset: asset)
-                item.videoComposition = VideoEngine.liveComposition(asset: asset, state: previewCorrection, comparisonSize: comparisonSize, diagnostic: previewMode)
-                itemObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
-                    if item.status == .failed {
-                        let message = item.error?.localizedDescription ?? "The video preview could not be loaded."
-                        Task { @MainActor in self?.previewError = message }
-                    }
-                }
-                player.replaceCurrentItem(with: item)
-                self.sourceAccess = access
-                refreshStill()
+                installVideo(asset: asset, url: newURL, info: info, access: access)
+
             } catch is CancellationError { }
             catch { self.error = error.localizedDescription }
             activity = nil
@@ -162,12 +176,18 @@ final class AppModel: ObservableObject {
             defer { withExtendedLifetime(sourceAccess) {} }
             do {
                 let worker = Task.detached(priority: .userInitiated) { [self] in
-                    try await VideoEngine.analyse(url: url, region: nil) { value in
-                        Task { @MainActor in self.progress = value }
+                    let stamp = try ProjectSourceStamp.read(url)
+                    let analysis = try await VideoEngine.analyse(url: url, region: nil) { value in
+                        Task { @MainActor in self.progress = value * 0.9 }
                     }
+                    let fingerprint = try SourceFingerprint.read(url)
+                    guard stamp == (try ProjectSourceStamp.read(url)) else { throw ProjectError.sourceChanged }
+                    return (analysis, fingerprint, stamp)
                 }
-                let analysis = try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
+                let (analysis, fingerprint, stamp) = try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
                 try Task.checkCancellation()
+                projectSource = ProjectSource(url: url, fingerprint: fingerprint)
+                sourceStamp = stamp
                 let sameFrames = result?.samples.map(\.time) == analysis.samples.map(\.time)
                 result = analysis
                 if !sameFrames {
@@ -222,7 +242,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func updateCurve() {
+    func updateCurve(markEdited: Bool = true) {
         guard let result else { return }
         curve = SceneCorrection.curve(base: result.samples, boundaries: sceneBoundaries,
                                       settings: sceneSettings, references: referenceResults)
@@ -236,6 +256,7 @@ final class AppModel: ObservableObject {
         })
         exportedURL = nil
         updatePreview()
+        if markEdited { projectEdited() }
     }
 
     func splitAtPlayhead() {
@@ -457,8 +478,6 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// A video export does not save editable scene settings, so every analysed
-    /// session needs protection until project saving is available.
     func confirmLeavingSession() -> Bool {
         if busy {
             let alert = NSAlert()
@@ -468,14 +487,20 @@ final class AppModel: ObservableObject {
             alert.runModal()
             return false
         }
-        guard result != nil else { return true }
+        guard projectHasChanges else { return true }
+        flushCheckpoint()
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = "Discard this editing session?"
-        alert.informativeText = "Scene cuts, reference areas and correction settings are not saved as a project. Exported videos are safe, but you cannot reopen these settings after discarding them."
-        alert.addButton(withTitle: "Keep Editing")
-        alert.addButton(withTitle: "Discard Session")
-        return alert.runModal() == .alertSecondButtonReturn
+        alert.messageText = "Save changes to this project?"
+        alert.informativeText = "Save your scene cuts, reference areas and correction settings so you can resume later. Exporting a video does not save an editable project."
+        alert.addButton(withTitle: "Save Project")
+        alert.addButton(withTitle: "Discard Changes")
+        alert.addButton(withTitle: "Cancel")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: return saveProject()
+        case .alertSecondButtonReturn: return true
+        default: return false
+        }
     }
 
     func openDemo() {
@@ -518,5 +543,267 @@ private struct ExportOptionsView: View {
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(12)
+    }
+}
+
+
+extension AppModel {
+    private func installVideo(asset: AVURLAsset, url: URL, info: VideoInfo, access: SecurityScopedAccess) {
+        self.asset = asset; self.url = url; self.info = info
+        sourceAccess = access
+        selectingRegion = false; exportedURL = nil; stillImage = nil; previewError = nil; playhead = 0
+        previewCorrection.set(corrected ? curve : .empty)
+        let item = AVPlayerItem(asset: asset)
+        item.videoComposition = VideoEngine.liveComposition(asset: asset, state: previewCorrection,
+                                                            comparisonSize: comparisonSize, diagnostic: previewMode)
+        itemObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
+            if item.status == .failed {
+                let message = item.error?.localizedDescription ?? "The video preview could not be loaded."
+                Task { @MainActor in self?.previewError = message }
+            }
+        }
+        player.replaceCurrentItem(with: item)
+        refreshStill()
+    }
+
+    func chooseProject() {
+        guard !busy else { return }
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.frankLumaProject]
+        panel.allowsMultipleSelection = false
+        panel.message = "Open a FrankLuma project to resume editing."
+        if panel.runModal() == .OK, let url = panel.url { openProject(url) }
+    }
+
+    private func snapshot() throws -> ProjectDocument {
+        guard let projectSource, let result, !result.samples.isEmpty else { throw ProjectError.invalidDocument }
+        let starts = [0] + sceneBoundaries.sorted()
+        return ProjectDocument(source: projectSource, frameCount: result.samples.count,
+            boundaries: sceneBoundaries.sorted(),
+            scenes: starts.map { SavedScene(startFrame: $0, settings: sceneSettings[$0] ?? defaults) },
+            defaults: defaults, exportOptions: exportOptions, playhead: playhead, previewMode: previewMode)
+    }
+
+    @discardableResult
+    func saveProject(asCopy: Bool = false) -> Bool {
+        guard !busy, result != nil, let sourceURL = url else { return false }
+        var destination = asCopy ? nil : projectURL
+        if destination == nil {
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.frankLumaProject]
+            panel.nameFieldStringValue = (projectURL ?? sourceURL).deletingPathExtension().lastPathComponent + ".frankluma"
+            panel.message = "Save editable settings. Keep the original video; it is linked, not copied into the project."
+            guard panel.runModal() == .OK, let selected = panel.url else { return false }
+            destination = selected
+        }
+        guard let destination else { return false }
+        let access = SecurityScopedAccess(destination)
+        do {
+            guard destination.resolvingSymlinksInPath().standardizedFileURL != sourceURL.resolvingSymlinksInPath().standardizedFileURL else {
+                throw VideoError.message("Choose a different filename so the source video is preserved.")
+            }
+            guard sourceStamp == (try ProjectSourceStamp.read(sourceURL)) else { throw ProjectError.sourceChanged }
+            var document = try snapshot()
+            document.source = ProjectSource(url: sourceURL, fingerprint: document.source.fingerprint)
+            try ProjectStore.write(document, to: destination)
+            projectSource = document.source; projectURL = destination; projectAccess = access
+            projectHasChanges = false
+            clearCheckpoint()
+            return true
+        } catch { self.error = error.localizedDescription; return false }
+    }
+
+    func openProject(_ file: URL) {
+        guard !busy, file.isFileURL else { return }
+        let access = SecurityScopedAccess(file)
+        do {
+            let document = try ProjectStore.read(file)
+            guard confirmLeavingSession() else { return }
+            loadProject(document, file: file, access: access)
+        } catch { self.error = error.localizedDescription }
+    }
+
+    private func locateSource(_ source: ProjectSource) -> URL? {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.movie, .video]
+        panel.allowsMultipleSelection = false
+        panel.message = "Locate \(source.name) or an identical copy. Saved edits require the original video."
+        panel.prompt = "Relink Video"
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
+    func relinkSource() {
+        guard !busy, result != nil else { return }
+        do {
+            let document = try snapshot()
+            guard let source = locateSource(document.source) else { return }
+            loadProject(document, file: projectURL, access: projectAccess, sourceOverride: source)
+        } catch { self.error = error.localizedDescription }
+    }
+
+    private func loadProject(_ document: ProjectDocument, file: URL?, access: SecurityScopedAccess?,
+                             sourceOverride: URL? = nil, recovering id: UUID? = nil) {
+        var candidate = sourceOverride ?? document.source.resolve()
+        var sourceAccess = SecurityScopedAccess(candidate)
+        if !FileManager.default.isReadableFile(atPath: candidate.path) {
+            guard let located = locateSource(document.source) else { return }
+            candidate = located
+            sourceAccess = SecurityScopedAccess(candidate)
+        }
+        let sourceURL = candidate, sourceScope = sourceAccess
+        let relinked = sourceURL.resolvingSymlinksInPath().standardizedFileURL != URL(fileURLWithPath: document.source.path).resolvingSymlinksInPath().standardizedFileURL || sourceOverride != nil
+        activity = "Reopening project and checking source"; progress = 0
+        player.pause(); stillTask?.cancel()
+        task = Task {
+            do {
+                let worker = Task.detached(priority: .userInitiated) { [sourceScope] in
+                    defer { withExtendedLifetime(sourceScope) {} }
+                    let stamp = try ProjectSourceStamp.read(sourceURL)
+                    let fingerprint = try SourceFingerprint.read(sourceURL)
+                    guard fingerprint == document.source.fingerprint else { throw ProjectError.differentSource }
+                    let asset = AVURLAsset(url: sourceURL)
+                    let info = try await VideoEngine.info(for: asset)
+                    try MediaSupport.validate(info)
+                    let regions = Array(Set(document.scenes.compactMap { $0.settings.reference }))
+                    let steps = Double(1 + regions.count)
+                    let analysis = try await VideoEngine.analyse(url: sourceURL, region: nil) { value in
+                        Task { @MainActor in self.progress = value / steps }
+                    }
+                    guard analysis.samples.count == document.frameCount else { throw ProjectError.differentSource }
+                    var references: [ReferenceRegion: [ExposureSample]] = [:]
+                    for (index, region) in regions.enumerated() {
+                        try Task.checkCancellation()
+                        let measured = try await VideoEngine.analyse(url: sourceURL, region: region.rect) { value in
+                            Task { @MainActor in self.progress = (Double(index + 1) + value) / steps }
+                        }
+                        guard measured.samples.map(\.time) == analysis.samples.map(\.time) else { throw ProjectError.sourceChanged }
+                        references[region] = measured.samples
+                    }
+                    guard stamp == (try ProjectSourceStamp.read(sourceURL)) else { throw ProjectError.sourceChanged }
+                    return (info, analysis, references, stamp)
+                }
+                let (info, analysis, references, stamp) = try await withTaskCancellationHandler {
+                    try await worker.value
+                } onCancel: { worker.cancel() }
+                try Task.checkCancellation()
+                // Commit only after all source checks and reference measurements
+                // succeed. Errors and cancellation retain the existing session.
+                finishSession()
+                installingProject = true
+                projectURL = file; projectAccess = access
+                recoveryID = id ?? UUID()
+                projectSource = ProjectSource(url: sourceURL, fingerprint: document.source.fingerprint)
+                sourceStamp = stamp
+                defaults = document.defaults; exportOptions = document.exportOptions
+                previewMode = document.previewMode
+                result = analysis; sceneBoundaries = Set(document.boundaries)
+                sceneSettings = Dictionary(uniqueKeysWithValues: document.scenes.map { ($0.startFrame, $0.settings) })
+                referenceResults = references; selectedSceneStart = 0
+                installVideo(asset: AVURLAsset(url: sourceURL), url: sourceURL, info: info, access: sourceScope)
+                updateCurve(markEdited: false)
+                seek(toTime: document.playhead)
+                installingProject = false
+                projectHasChanges = id != nil || relinked
+                if projectHasChanges { flushCheckpoint() }
+                refreshRecoveryAvailability()
+            } catch is CancellationError { }
+            catch ProjectError.differentSource {
+                activity = nil
+                let alert = NSAlert()
+                alert.messageText = "The source video does not match"
+                alert.informativeText = ProjectError.differentSource.localizedDescription
+                alert.addButton(withTitle: "Locate Original Video")
+                alert.addButton(withTitle: "Cancel")
+                if alert.runModal() == .alertFirstButtonReturn, let located = locateSource(document.source) {
+                    loadProject(document, file: file, access: access, sourceOverride: located, recovering: id)
+                    return
+                }
+            }
+            catch { self.error = error.localizedDescription }
+            activity = nil
+        }
+    }
+
+    private func projectEdited() {
+        guard !installingProject, result != nil else { return }
+        projectHasChanges = true
+        checkpointTask?.cancel()
+        checkpointTask = Task { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(600)); try Task.checkCancellation() }
+            catch { return }
+            self?.flushCheckpoint()
+        }
+    }
+
+    func flushCheckpoint() {
+        checkpointTask?.cancel(); checkpointTask = nil
+        guard projectHasChanges else { return }
+        do {
+            try recoveryStore.write(snapshot(), id: recoveryID)
+            recoveryWarning = nil
+        } catch {
+            recoveryWarning = "Autosave recovery is unavailable. Save your project: " + error.localizedDescription
+        }
+    }
+
+    private func clearCheckpoint() {
+        checkpointTask?.cancel(); checkpointTask = nil
+        do { try recoveryStore.remove(id: recoveryID); recoveryWarning = nil }
+        catch { recoveryWarning = "Could not remove an old recovery copy: " + error.localizedDescription }
+        refreshRecoveryAvailability()
+    }
+
+    func finishSession() { clearCheckpoint() }
+
+    func closeSession() {
+        finishSession()
+        player.pause(); stillTask?.cancel(); stillGeneration += 1
+        player.replaceCurrentItem(with: nil); itemObservation = nil
+        sourceAccess = nil; projectAccess = nil; projectSource = nil; sourceStamp = nil
+        url = nil; info = nil; projectURL = nil; result = nil
+        sceneBoundaries = []; sceneSettings = [:]; referenceResults = [:]; stablePatchCounts = [:]
+        curve = .empty; exposureComparison = .empty; previewCorrection.set(.empty)
+        stillImage = nil; previewError = nil; exportedURL = nil
+        playhead = 0; selectedSceneStart = 0; selectingRegion = false; isPlaying = false
+        projectHasChanges = false; recoveryID = UUID()
+        refreshRecoveryAvailability()
+    }
+
+    func restoreRecovery(_ file: URL) {
+        guard !busy, let id = UUID(uuidString: file.deletingPathExtension().lastPathComponent) else { return }
+        do {
+            let document = try ProjectStore.read(file)
+            loadProject(document, file: nil, access: nil, recovering: id)
+        } catch { self.error = error.localizedDescription }
+    }
+
+    private func refreshRecoveryAvailability() {
+        recoveryAvailable = !recoveryStore.candidates(excluding: recoveryID).isEmpty
+    }
+
+    func checkRecoveryOnLaunch() {
+        guard !checkedRecovery else { return }
+        checkedRecovery = true
+        if url == nil, recoveryAvailable { recoverSession() }
+    }
+
+    func recoverSession() {
+        guard !busy, let file = recoveryStore.candidates(excluding: recoveryID).first,
+              let id = UUID(uuidString: file.deletingPathExtension().lastPathComponent) else { return }
+        let alert = NSAlert()
+        alert.messageText = "Recover an unfinished editing session?"
+        alert.informativeText = "FrankLuma found an autosaved session from a previous launch. Recover it to resume your edits, or keep it for later."
+        alert.addButton(withTitle: "Recover Session")
+        alert.addButton(withTitle: "Keep for Later")
+        alert.addButton(withTitle: "Discard Recovery")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            guard confirmLeavingSession() else { return }
+            restoreRecovery(file)
+        case .alertThirdButtonReturn:
+            do { try recoveryStore.remove(id: id); refreshRecoveryAvailability() }
+            catch { self.error = error.localizedDescription }
+        default: break
+        }
     }
 }

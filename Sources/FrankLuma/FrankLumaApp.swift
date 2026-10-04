@@ -13,6 +13,7 @@ struct FrankLumaApp: App {
                 .preferredColorScheme(.dark)
                 .onOpenURL { model.open($0) }
                 .onAppear { lifecycle.model = model }
+                .task { model.checkRecoveryOnLaunch() }
                 .background(SessionWindowGuard(model: model))
         }
         .defaultSize(width: 1200, height: 820)
@@ -23,8 +24,21 @@ struct FrankLumaApp: App {
             }
             CommandGroup(replacing: .newItem) {
                 Button("Open Video…", action: model.chooseVideo).keyboardShortcut("o").disabled(model.busy)
+                Button("Open Project…", action: model.chooseProject).keyboardShortcut("o", modifiers: [.command, .shift]).disabled(model.busy)
                 Button("Export Corrected Video…", action: model.export).keyboardShortcut("e", modifiers: [.command, .shift])
                     .disabled(model.busy || model.result == nil)
+            }
+            CommandGroup(replacing: .saveItem) {
+                Button("Save Project") { model.saveProject() }.keyboardShortcut("s")
+                    .disabled(model.busy || model.result == nil)
+                Button("Save Project As…") { model.saveProject(asCopy: true) }
+                    .keyboardShortcut("s", modifiers: [.command, .shift])
+                    .disabled(model.busy || model.result == nil)
+                Divider()
+                Button("Relink Source Video…", action: model.relinkSource)
+                    .disabled(model.busy || model.result == nil)
+                Button("Recover Unsaved Session…", action: model.recoverSession)
+                    .disabled(model.busy || !model.recoveryAvailable)
             }
         }
         Window("FrankLuma Help", id: "help") {
@@ -79,11 +93,13 @@ struct ContentView: View {
         }
         .background(Color(red: 0.075, green: 0.085, blue: 0.09))
         .tint(accent)
-        .navigationTitle(model.url?.lastPathComponent ?? "FrankLuma")
+        .navigationTitle(model.projectTitle)
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
                 Button(action: model.chooseVideo) { Label("Open Video…", systemImage: "folder") }
                     .help("Open a video (⌘O)").disabled(model.busy)
+                Button { model.saveProject() } label: { Label("Save Project", systemImage: "square.and.arrow.down") }
+                    .help("Save editable settings (⌘S)").disabled(model.result == nil || model.busy)
                 Button(action: model.export) { Label("Export…", systemImage: "square.and.arrow.up") }
                     .help("Export corrected video (⇧⌘E)").disabled(model.result == nil || model.busy)
             }
@@ -338,6 +354,10 @@ struct ContentView: View {
                 Text("\(Int(model.progress * 100))%").font(.system(size: 10, design: .monospaced)).foregroundStyle(muted)
                 Spacer()
                 Button("Cancel", action: model.cancel).controlSize(.small)
+            } else if let warning = model.recoveryWarning {
+                Text(warning).font(.system(size: 11)).foregroundStyle(.orange).lineLimit(1).help(warning)
+                Spacer()
+                Button("Save Project") { model.saveProject() }.controlSize(.small)
             } else if let exported = model.exportedURL {
                 Text("Exported \(exported.lastPathComponent)").font(.system(size: 11)).lineLimit(1)
                 Spacer()
@@ -417,7 +437,9 @@ struct RegionOverlay: View {
 final class FrankLumaLifecycle: NSObject, NSApplicationDelegate {
     weak var model: AppModel?
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        model?.confirmLeavingSession() == false ? .terminateCancel : .terminateNow
+        guard model?.confirmLeavingSession() != false else { return .terminateCancel }
+        model?.finishSession()
+        return .terminateNow
     }
 }
 
@@ -444,7 +466,9 @@ private struct SessionWindowGuard: NSViewRepresentable {
         init(model: AppModel) { self.model = model }
         func windowShouldClose(_ sender: NSWindow) -> Bool {
             guard model.confirmLeavingSession() else { return false }
-            return original?.windowShouldClose?(sender) ?? true
+            let close = original?.windowShouldClose?(sender) ?? true
+            if close { model.closeSession() }
+            return close
         }
         override func responds(to selector: Selector!) -> Bool {
             super.responds(to: selector) || (original?.responds(to: selector) ?? false)
@@ -466,7 +490,7 @@ private struct FrankLumaHelp: View {
                 Text("Supported media").font(.headline)
                 Text("SDR videos readable by macOS, up to 4096 pixels on either side. Codec availability depends on macOS. HDR (including HLG and PQ) and protected videos are not supported. Convert them to an unprotected SDR Rec. 709 copy first.")
                 Text("Export and editing sessions").font(.headline)
-                Text("Output choices are H.264 or HEVC in MP4/QuickTime, and ProRes 422 in QuickTime. High quality produces larger H.264/HEVC files; ProRes uses higher precision for editing. QuickTime preserves compatible original audio. MP4 preserves AAC or converts other audio to AAC, downmixing multichannel audio to stereo. Video is re-encoded, not lossless. Source files stay untouched. Scene settings are not saved as projects; closing or opening another video asks before discarding an analysed session.")
+                Text("Output choices are H.264 or HEVC in MP4/QuickTime, and ProRes 422 in QuickTime. High quality produces larger H.264/HEVC files; ProRes uses higher precision for editing. QuickTime preserves compatible original audio. MP4 preserves AAC or converts other audio to AAC, downmixing multichannel audio to stereo. Video is re-encoded, not lossless. Source files stay untouched. Save Project (⌘S) preserves scene cuts, reference areas, correction settings and export options in a small .frankluma file. Keep the original video with it. Open Project rebuilds analysis and restores edits; use Relink Source Video for an identical copy that has moved. Unsaved edits are autosaved locally for crash recovery. Closing or opening another file offers Save, Discard or Cancel. Exporting a movie does not save your project.")
                 Text("Timeline controls").font(.headline)
                 Text("⌘ + mouse wheel or trackpad pinch zooms around the pointer. Scroll to pan; Fit shows the whole clip. Click a frame slice to select it. Arrow keys step frames; Space plays or pauses. Orange cut handles snap to frames. Inspector frame steppers provide a keyboard-accessible alternative.")
                 Text("Support").font(.headline)

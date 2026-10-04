@@ -2,7 +2,7 @@ import AVFoundation
 import CoreImage
 import AppKit
 
-struct VideoInfo {
+struct VideoInfo: Sendable {
     let duration: Double
     let width: Int
     let height: Int

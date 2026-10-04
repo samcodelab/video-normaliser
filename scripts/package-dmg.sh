@@ -27,7 +27,7 @@ Requires macOS 14 or later. Supports Apple silicon and Intel Macs.
 
 Choose Help > Open Demo Video to try the included sample.
 SDR video only, up to 4096 pixels per side. Output: H.264/HEVC MP4 or QuickTime, or ProRes 422 QuickTime.
-Editing sessions are not saved as projects; export your corrected video before leaving.
+Save Project preserves your edits in a .frankluma file. Keep its source video. Unsaved edits have local crash recovery.
 
 Support: support@broadframestudio.com
 EOF
