@@ -1,8 +1,8 @@
 # FrankLuma privacy policy
 
-Draft for publication — 4 October 2026.
+Published policy — effective 4 October 2026.
 
-Intended public URL: https://broadframestudio.com/frankluma/privacy/index.html (returned HTTP 404 when checked on 4 October 2026).
+Public URL: https://broadframestudio.com/frankluma/privacy/ (verified HTTP 200 on 4 October 2026; index.html redirects here).
 
 FrankLuma processes video locally on your Mac. It does not upload your videos, audio, images or analysis results. It does not collect personal information, track usage, include advertising or use third-party analytics.
 
@@ -14,4 +14,4 @@ FrankLuma does not use your camera, microphone, Photos library, contacts or loca
 
 If you choose to share exported videos or diagnostic files with someone else, that sharing is your action and is outside FrankLuma's local processing. Diagnostics can include frame measurements and lighting settings. Shared project files can reveal the source filename/path and editing settings; another Mac may need you to relink the video.
 
-For privacy or support questions, contact support@broadframestudio.com. If you email support, your message and any attachments are shared with the support team at your request. Before publishing this policy, host it at the URL entered in App Store Connect. Review this policy whenever the app's data practices change.
+For privacy or support questions, contact support@broadframestudio.com. If you email support, your message and any attachments are shared with the support team at your request. Review this policy whenever the app's data practices change.

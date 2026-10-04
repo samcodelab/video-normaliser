@@ -64,7 +64,7 @@ Use the **FrankLuma App Store** scheme to Archive, then choose App Store Connect
 
 Before submission, confirm the App Store Connect record, version/build, support URL, published privacy-policy URL, screenshots, description, pricing and age rating; inspect Organizer's privacy report and validate the archive. Build 3 archive/export and provisioning have succeeded; App Store Connect listing, upload, availability and review remain pending.
 
-The supplied privacy-policy URL is https://broadframestudio.com/frankluma/privacy/index.html. It is linked from the Help menu and Help window. Verification on 4 October 2026 returned HTTP 404; publish the page and confirm it is accessible before entering it in App Store Connect (App Review guideline 5.1.1). The local policy draft remains in `docs/PRIVACY.md`. Complete the App Privacy questionnaire to match the actual local-only, no-collection behaviour. Confirm export-compliance answers and applicable agreements, tax/banking details and regional trader disclosures in the developer account. TestFlight is an optional beta-distribution step, not a submission requirement. Separate Developer ID notarisation is not required for Mac App Store distribution.
+The supplied privacy-policy URL is https://broadframestudio.com/frankluma/privacy/index.html. It is linked from the Help menu and Help window. Live verification on 4 October 2026 now returns HTTP 200 after a redirect to https://broadframestudio.com/frankluma/privacy/. The published policy is recorded in `docs/PRIVACY.md`; use the canonical URL in App Store Connect. Complete the App Privacy questionnaire to match the actual local-only, no-collection behaviour. Confirm export-compliance answers and applicable agreements, tax/banking details and regional trader disclosures in the developer account. TestFlight is an optional beta-distribution step, not a submission requirement. Separate Developer ID notarisation is not required for Mac App Store distribution.
 
 ## Permissions and privacy
 
@@ -78,7 +78,7 @@ The user grants file access through macOS Open/Save panels, drag-and-drop or Ope
 
 FrankLuma does not record audio/video, access the Photos library, contact network services, use analytics, or request broad folder/Full Disk Access. There are no camera, microphone, Photos, network, automation, executable-memory or library-validation exceptions. Source audio is read from the selected movie; this does not require microphone permission. Projects and recovery checkpoints retain read-only security-scoped bookmarks for the selected source video. They do not grant access to arbitrary folders. Project files are retained under the Open/Save panel access for subsequent saves.
 
-`Resources/PrivacyInfo.xcprivacy` declares no tracking or collected data. File timestamp access is declared with reasons `3B52.1` for user-selected source metadata and `C617.1` for recovery files inside the app container. Timestamps support source-change detection and recovery ordering. Revisit the manifest whenever adding preferences, disk-space checks, third-party SDKs or telemetry. A privacy manifest does not replace the public privacy policy or App Store privacy questionnaire. `docs/PRIVACY.md` supplies a factual policy draft for publication.
+`Resources/PrivacyInfo.xcprivacy` declares no tracking or collected data. File timestamp access is declared with reasons `3B52.1` for user-selected source metadata and `C617.1` for recovery files inside the app container. Timestamps support source-change detection and recovery ordering. Revisit the manifest whenever adding preferences, disk-space checks, third-party SDKs or telemetry. A privacy manifest does not replace the public privacy policy or App Store privacy questionnaire. `docs/PRIVACY.md` records the published privacy policy.
 
 ## Icon
 
@@ -119,7 +119,7 @@ The demo is original, procedurally generated geometric footage; its generator is
 
 Analysed sessions can be saved as `.frankluma` projects. Opening another video/project, closing the main window or quitting offers Save, Discard or Cancel for unsaved edits. Unsaved edits also have local recovery checkpoints; deliberate discard/closure clears the active checkpoint. Exports are saved videos, not editable projects. While a task is running, close/quit asks the user to wait or cancel from the main window first.
 
-Remaining device/account checks: run the App Store-signed build through TestFlight; exercise actual HDR/iPhone samples, hour-long/high-frame-rate footage, external and removable volumes, real disk-full/permission failures, macOS 14, and Intel hardware. The local automated tests do not replace those checks. The public support email is support@broadframestudio.com and is linked in Help. The support URL is https://broadframestudio.com/frankluma/help/index.html. Both support and privacy URLs returned HTTP 404 during checks; website deployment is deferred at the user’s request.
+Remaining device/account checks: run the App Store-signed build through TestFlight; exercise actual HDR/iPhone samples, hour-long/high-frame-rate footage, external and removable volumes, real disk-full/permission failures, macOS 14, and Intel hardware. The local automated tests do not replace those checks. The public support email is support@broadframestudio.com and is linked in Help. The support URL is https://broadframestudio.com/frankluma/help/index.html. Both support and privacy URLs are now verified live (HTTP 200 after index.html redirects).
 
 
 ### Build 2 validation
@@ -163,3 +163,8 @@ Local verification for project support: the command-line suite ran 63 tests with
 - App Store Connect opened only its header in Safari, so app-record configuration, pricing, questionnaires and upload could not be completed in this session. No upload or submission occurred.
 
 See `docs/app-store/STATUS.md` for remaining account and device work. Intel hardware validation has been waived by the user; the universal build still contains Intel support. TestFlight is recommended only as optional beta testing. The earlier notarised build 2 DMG does not include later export/project/release changes.
+
+
+### Live website verification — 4 October 2026
+
+The previously missing pages are now live: https://broadframestudio.com/frankluma/privacy/ and https://broadframestudio.com/frankluma/help/ return HTTP 200 over HTTPS. Their index.html URLs return HTTP 308 redirects to those canonical URLs, so the existing in-app privacy link works. The live policy matches local processing, project/bookmark metadata and recovery storage, and both pages provide the correct support email. All 26 linked pages/assets checked with curl returned HTTP 200. This supersedes the earlier website-publication blocker; no website source or deployment changes were made during verification. Mailbox delivery was not tested.

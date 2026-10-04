@@ -12,14 +12,14 @@
 
 Package: `.release/app-store-build-3-final/export/FrankLuma.pkg` (ignored build artifact, on this Mac). No upload, TestFlight distribution or review submission has occurred.
 
-## Deferred website publication
+## Live website verified — 4 October 2026
 
-The user requested leaving the website alone for now. Existing source is in sibling `BroadFrameStudio.com`; its build and FrankLuma local links/assets pass. These URLs returned HTTP 404 and must work before submission:
+Both pages now return HTTP 200 over HTTPS. The index.html URLs redirect with HTTP 308 to the canonical trailing-slash URLs. The privacy policy matches local processing, project/bookmark metadata and recovery storage; both pages provide support@broadframestudio.com. Use these canonical URLs in App Store Connect:
 
-- Privacy: https://broadframestudio.com/frankluma/privacy/index.html
-- Support: https://broadframestudio.com/frankluma/help/index.html
+- Privacy: https://broadframestudio.com/frankluma/privacy/
+- Support: https://broadframestudio.com/frankluma/help/
 
-No website source edits, commits, pushes or deployment were made by this release-preparation task.
+No website source edits or deployment were made during this verification. The in-app privacy link uses index.html and works through the redirect. All 26 linked pages/assets checked with curl returned HTTP 200. Mailbox delivery was not tested.
 
 ## App Store Connect handoff
 

@@ -1,6 +1,6 @@
 # FrankLuma 1.0 App Store listing
 
-Prepared for version 1.0.0, build 3. Copy is ready for review; live URLs and account settings remain pending.
+Prepared for version 1.0.0, build 3. Copy is ready for review; account settings and upload remain pending; privacy/support URLs are verified live.
 
 ## App information
 
@@ -12,9 +12,9 @@ Primary category: Video
 
 Keywords: stop motion,flicker,exposure,animation,deflicker,lighting,video correction
 
-Privacy policy URL: https://broadframestudio.com/frankluma/privacy/index.html
+Privacy policy URL: https://broadframestudio.com/frankluma/privacy/
 
-Support URL: https://broadframestudio.com/frankluma/help/index.html (local source includes support contact; live availability pending)
+Support URL: https://broadframestudio.com/frankluma/help/ (verified live, includes support contact)
 
 Price: A$19.99, one-time purchase in the Australian storefront. Select this price in App Store Connect and review automatic prices in other regions. No subscriptions or in-app purchases are implemented.
 
