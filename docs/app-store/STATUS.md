@@ -31,14 +31,16 @@ The account page did not load beyond its header in Safari. In App Store Connect:
 4. Enter LISTING.md copy, the verified live URLs, screenshots and required review contact details.
 5. Complete App Privacy, current age-rating and export-compliance questionnaires against the shipped app.
 6. Upload the signed package with Xcode Organizer or Transporter, validate Apple's processing results, and inspect the archive privacy report. A successful local export is not server validation or approval.
-7. Test the processed build through TestFlight, then submit when website and remaining device validation are complete.
+7. Submit when website and final release checks are complete. TestFlight is optional, not an Apple submission requirement; a small beta test remains a useful additional check.
 
 ## Remaining device and footage checks
 
-- macOS 14 and Intel: launch, analyse, preview, save/reopen and export all five formats.
+- macOS 14 on Apple silicon: launch, analyse, preview, save/reopen and export all five formats. Intel device validation is waived at the user’s request; the current universal binary still contains Intel support.
 - Finder project opening and project drag-and-drop in the production-signed app.
 - External/removable volumes and real disk-full/permission failures.
 - Hour-long/high-frame-rate footage, real HDR/iPhone rejection, multichannel downmix and visual checks on varied production footage.
-- Final Store build on a second Mac through TestFlight, including crash recovery and source bookmarks across restarts.
+- Recommended additional check: final Store build on a second Apple-silicon Mac, including crash recovery and source bookmarks across restarts. TestFlight can distribute it but is optional.
 
 The automated suite includes native codec/timing/audio conversion and a one-minute video, but does not establish completion of the physical-device checks above. HDR remains intentionally unsupported.
+
+[TestFlight is optional — Apple](https://developer.apple.com/help/glossary/testflight-beta-testing/)
