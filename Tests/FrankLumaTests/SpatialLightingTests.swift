@@ -67,6 +67,40 @@ final class SpatialLightingTests: XCTestCase {
         }
     }
 
+    func testUnevenFlashesDoNotBorrowAnOvercorrectedFloorAsReference() {
+        let w = 64, h = 40
+        let frames = (0..<11).map { frame -> SpatialThumbnail in
+            var rgb: [Float] = []
+            for y in 0..<h { for x in 0..<w {
+                let upper = y < h/2
+                let light: Double = frame == 4 ? (upper ? -0.45 : -0.18) : frame == 5 ? (upper ? 0.10 : 0.28) : 0
+                let texture = 0.9 + 0.1*sin(Double(x)*0.6)*cos(Double(y)*0.8)
+                let colour = upper ? [0.015, 0.10, 0.40] : [0.07, 0.42, 0.12]
+                rgb += colour.map { Float($0*texture*pow(2,light)) }
+            } }
+            return SpatialThumbnail(width: w, height: h, rgb: rgb)
+        }
+        let samples = frames.enumerated().map { ExposureSample(time: Double($0.offset)/12, level: 0, segment: 0, thumbnail: $0.element) }
+        let global = (0..<11).map { $0 == 4 ? 0.45 : $0 == 5 ? -0.10 : 0.0 }
+        for mode in NormalisationMode.allCases {
+            for strength in [0.5, 1.0] {
+                let fields = SpatialLighting.estimate(samples: samples, global: global, radius: 0.5, strength: strength, mode: mode)
+                for frame in 3...6 {
+                    XCTAssertNil(fields[frame].fallback)
+                    for (y, light) in [(0.2, frame == 4 ? -0.45 : frame == 5 ? 0.10 : 0.0),
+                                       (0.8, frame == 4 ? -0.18 : frame == 5 ? 0.28 : 0.0)] {
+                        let ev = SpatialField.basis(x: 0.5, y: y, columns: 9, rows: 6).reduce(0) {
+                            $0 + fields[frame].exposureStops[$1.0]*$1.1
+                        }
+                        let after = light + global[frame]*strength + ev
+                        XCTAssertEqual(after, light*(1-strength), accuracy: 0.035,
+                                       "Both saturated surfaces must follow their own target, including the frame after a flash")
+                    }
+                }
+            }
+        }
+    }
+
     func testUniformFlickerLeavesNoSpatialResidualAfterGlobalCorrection() {
         let frames=(0..<7).map { i in thumbnail(exposure: { _,_ in i == 3 ? -0.4 : 0 }) }
         let samples=frames.enumerated().map { ExposureSample(time:Double($0.offset)/12,level:0,segment:0,thumbnail:$0.element) }

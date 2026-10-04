@@ -97,14 +97,60 @@ enum SpatialLighting {
         }
     }
 
+    /// Independent patch targets from original light, never from neighbours
+    /// that have already received the scene-wide exposure adjustment.
+    private static func temporalTargets(samples: [ExposureSample], radius: Double, mode: NormalisationMode) -> [[Double]] {
+        guard let thumbnail = samples.first?.thumbnail, thumbnail.width >= 24, thumbnail.height >= 20,
+              samples.allSatisfy({ $0.thumbnail?.width == thumbnail.width && $0.thumbnail?.height == thumbnail.height }) else { return [] }
+        let w = thumbnail.width, h = thumbnail.height
+        var means: [[Double]] = [], reds: [[Double]] = [], greens: [[Double]] = []
+        means.reserveCapacity(samples.count); reds.reserveCapacity(samples.count); greens.reserveCapacity(samples.count)
+        for sample in samples {
+            if Task.isCancelled { return [] }
+            let rgb = sample.thumbnail!.rgb
+            var patches: [Double] = [], red: [Double] = [], green: [Double] = []
+            patches.reserveCapacity(336)
+            for row in 0..<14 { for col in 0..<24 {
+                let x = min(w-3, max(2, Int((Double(col)+0.5)/24*Double(w))))
+                let y = min(h-3, max(2, Int((Double(row)+0.5)/14*Double(h))))
+                var r = 0.0, g = 0.0, b = 0.0
+                for dy in -2...2 { for dx in -2...2 {
+                    let p = ((y+dy)*w+x+dx)*3
+                    r += Double(rgb[p]); g += Double(rgb[p+1]); b += Double(rgb[p+2])
+                } }
+                patches.append((0.2126*r+0.7152*g+0.0722*b)/25)
+                red.append(r/max(0.001,r+g+b)); green.append(g/max(0.001,r+g+b))
+            } }
+            means.append(patches); reds.append(red); greens.append(green)
+        }
+        var targets = means
+        for patch in 0..<336 {
+            if Task.isCancelled { return [] }
+            let red = ExposureMath.median(reds.map { $0[patch] })
+            let green = ExposureMath.median(greens.map { $0[patch] })
+            let valid = samples.indices.filter {
+                abs(reds[$0][patch]-red)+abs(greens[$0][patch]-green) < 0.04 && means[$0][patch] > 0.015
+            }
+            for i in samples.indices { targets[i][patch] = .nan }
+            guard valid.count >= 3 else { continue }
+            let series = valid.map { ExposureSample(time: samples[$0].time,
+                level: log2(max(0.001, means[$0][patch])), segment: samples[$0].segment) }
+            let correction = ExposureMath.curve(samples: series, radius: radius, strength: 1, mode: mode)
+            for (index, i) in valid.enumerated() { targets[i][patch] = means[i][patch]*pow(2,correction.stops[index]) }
+        }
+        return targets
+    }
+
     /// Work on independent ranges with a six-frame halo. This reproduces the
     /// serial neighbour selection while using multiple cores on long shots.
     static func estimateAsync(samples: [ExposureSample], global: [Double], radius: Double, strength: Double,
-                              region: CGRect? = nil, previous: [SpatialField] = [], chunkSize: Int = 120) async -> [SpatialField] {
+                              region: CGRect? = nil, previous: [SpatialField] = [], chunkSize: Int = 120, mode: NormalisationMode = .smooth) async -> [SpatialField] {
         let chunkSize = max(1, chunkSize)
         guard samples.count > chunkSize, samples.count == global.count, strength > 0 else {
-            return estimate(samples: samples, global: global, radius: radius, strength: strength, region: region, previous: previous)
+            return estimate(samples: samples, global: global, radius: radius, strength: strength, region: region, previous: previous, mode: mode)
         }
+        let targets = temporalTargets(samples: samples, radius: radius, mode: mode)
+        if Task.isCancelled { return [] }
         let workers = min(6, max(1, ProcessInfo.processInfo.activeProcessorCount / 2))
         return await withTaskGroup(of: (Int, [SpatialField]).self) { group in
             var output = [SpatialField](repeating: SpatialField(), count: samples.count)
@@ -122,7 +168,7 @@ enum SpatialLighting {
                         return field
                     } : []
                     let fields = estimate(samples: Array(samples[lower..<upper]), global: Array(global[lower..<upper]),
-                                          radius: radius, strength: strength, region: region, previous: old)
+                                          radius: radius, strength: strength, region: region, previous: old, mode: mode, targets: targets.isEmpty ? [] : Array(targets[lower..<upper]))
                     guard fields.count == upper-lower else { return (start, []) }
                     return (start, fields[(start-lower)..<(end-lower)].map { field -> SpatialField in
                         var field = field
@@ -144,7 +190,7 @@ enum SpatialLighting {
     }
 
     static func estimate(samples: [ExposureSample], global: [Double], radius: Double, strength: Double,
-                         region: CGRect? = nil, previous: [SpatialField] = []) -> [SpatialField] {
+                         region: CGRect? = nil, previous: [SpatialField] = [], mode: NormalisationMode = .smooth, targets: [[Double]] = []) -> [SpatialField] {
         if Task.isCancelled { return [] }
         guard !samples.isEmpty, samples.count == global.count, samples.allSatisfy({ $0.thumbnail != nil }), strength > 0 else {
             let disabled = SpatialField()
@@ -155,6 +201,8 @@ enum SpatialLighting {
             let disabled = SpatialField()
             return samples.map { _ in disabled }
         }
+        let targets = targets.count == samples.count ? targets : temporalTargets(samples: samples, radius: radius, mode: mode)
+        guard targets.count == samples.count, !Task.isCancelled else { return [] }
         // Only the current frame and its six local references need derived
         // luminance/gradient arrays. Keep that working set bounded on long shots.
         var frames: [Int: Frame] = [:]
@@ -193,7 +241,7 @@ enum SpatialLighting {
                 if let region, !region.contains(CGPoint(x: nx, y: ny)) { continue }
                 let x = min(w-3, max(2, Int(nx * Double(w))))
                 let y = min(h-3, max(2, Int(ny * Double(h))))
-                var targets: [Double] = [], offsets: [Double] = [], weights: [Double] = []
+                var gains: [Double] = [], matchedMeans: [Double] = [], alignedMeans: [Double] = [], weights: [Double] = []
                 let patch = (-2...2).flatMap { dy in (-2...2).map { dx in frames[i]!.luminance[(y+dy)*w+x+dx] } }
                 let current = patch.reduce(0,+)/Double(patch.count)
                 spreads[index] = sqrt(patch.map { pow($0-current,2) }.reduce(0,+)/Double(patch.count))
@@ -202,24 +250,39 @@ enum SpatialLighting {
                     let j = alignment.reference
                     let match = compare(frames[i]!, frames[j]!, x: x, y: y, dx: alignment.dx, dy: alignment.dy)
                     if match.confidence > 0 {
-                        targets.append(match.delta + global[j] - global[i])
-                        offsets.append(match.offset * pow(2, global[j]))
+                        gains.append(match.delta)
+                        let mean = current*pow(2,match.delta)+match.offset
+                        matchedMeans.append(mean)
+                        alignedMeans.append(mean*pow(2,global[j]))
                         weights.append(match.confidence)
                     }
                 }
-                let fraction = Double(targets.count) / Double(accepted.count)
+                let fraction = Double(gains.count) / Double(accepted.count)
                 field.motion[index] = 1 - fraction
-                guard targets.count >= 2, fraction >= 0.5 else { continue }
-                let residual = ExposureMath.median(targets)
-                // References are robust in time; gains themselves are not time
-                // smoothed. An isolated flash is corrected on its own frame.
-                let dispersion = ExposureMath.median(targets.map { abs($0-residual) })
-                let confidence = ExposureMath.median(weights) * fraction * max(0, 1-dispersion/0.18)
-                guard confidence > 0.25 else { continue }
+                guard gains.count >= 2, fraction >= 0.5 else { continue }
+                // Texture matches establish motion/contrast support. Brightness
+                // is anchored independently, so a globally overcorrected floor
+                // in a neighbouring flash cannot become this frame's target.
+                // Fixed-coordinate baselines are unsuitable for camera moves.
+                // Registered raw patch means retain their physical correspondence.
+                let translated = accepted.contains { $0.dx != 0 || $0.dy != 0 }
+                let desired = translated ? ExposureMath.median(alignedMeans) : targets[i][index]
+                guard desired.isFinite else { field.motion[index] = 1; continue }
+                // Gain and offset describe the same reference, so normalise
+                // its contrast to the independent target before combining fits.
+                // Raw gain medians alone would follow alternating bright/dark
+                // neighbours even when their mean target is already stable.
+                let contrast = zip(gains, matchedMeans).map {
+                    $0 + log2(max(0.001, desired)/max(0.001, $1))
+                }
+                let residual = ExposureMath.median(contrast) - global[i]
+                let confidence = ExposureMath.median(weights) * fraction
+                guard confidence > 0.25, current > 0.015 else { continue }
                 field.confidence[index] = confidence
                 field.requested[index] = max(-0.75, min(0.75, residual))
-                offsetTargets[index] = ExposureMath.median(offsets)
-                field.reference[index] = current * pow(2, global[i] + residual) + offsetTargets[index]
+                offsetTargets[index] = desired - current * pow(2, global[i] + field.requested[index])
+                field.reference[index] = desired
+
             } }
             // Remove samples adjacent to strong motion/occlusion. Never create
             // a subject-shaped correction edge: the fitted field stays coarse.
@@ -243,7 +306,7 @@ enum SpatialLighting {
             exposureField.requested = field.requested.indices.map { p in
                 log2(max(0.25, pow(2,field.requested[p]) + offsetTargets[p] / max(0.02,field.before[p]*pow(2,global[i]))))
             }
-            field.exposureStops = fit(field: exposureField).map { max(-0.6,min(0.6,$0))*strength }
+            field.exposureStops = fit(field: exposureField).map { max(-0.9,min(0.9,$0))*strength }
             let fitted = fitTone(field: field, offsets: offsetTargets, spreads: spreads, global: global[i])
             field.stops = fitted.gains.map { log2(max(0.25, $0)) * strength }
             field.offsets = fitted.offsets.map { $0 * strength }
@@ -253,9 +316,13 @@ enum SpatialLighting {
                 var support=0.0, total=0.0
                 for r in 0..<field.sampleRows { for c in 0..<field.sampleColumns {
                     let weight = supportWeights[y*field.columns+x][r*field.sampleColumns+c]
-                    support += weight*field.confidence[r*field.sampleColumns+c]; total += weight
+                    // Confidence already weights the fit. Fade by coverage of
+                    // reliable anchors, rather than weakening their gain again
+                    // when neighbouring foreground patches have been excluded.
+                    if field.confidence[r*field.sampleColumns+c] > 0.25 { support += weight }
+                    total += weight
                 } }
-                let supportWeight = min(1, support/max(0.00001,total)/0.20)
+                let supportWeight = min(1, support/max(0.00001,total)/0.35)
                 field.stops[y*field.columns+x] *= supportWeight
                 field.offsets[y*field.columns+x] *= supportWeight
                 field.exposureStops[y*field.columns+x] *= supportWeight

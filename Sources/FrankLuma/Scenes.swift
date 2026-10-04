@@ -221,8 +221,8 @@ enum SceneCorrection {
                 let global = calculate(base: frames, boundaries: [], settings: [0: globalOptions], references: localReferences, cache: [:])
                 if Task.isCancelled { break }
                 let previous = cache[scene.startFrame].flatMap { $0.frameCount == scene.frameCount ? $0.curve.spatial : nil } ?? []
-                let fields = await SpatialLighting.estimateAsync(samples: frames, global: global.curve.stops, radius: options.radius,
-                    strength: options.spatialStrength * options.strength, region: options.reference?.rect, previous: previous)
+                let fields = await SpatialLighting.estimateAsync(samples: frames, global: global.curve.stops.map { options.strength > 0 ? $0/options.strength : 0 }, radius: options.radius,
+                    strength: options.spatialStrength * options.strength, region: options.reference?.rect, previous: previous, mode: options.mode)
                 entry = CachedScene(settings: options, frameCount: scene.frameCount,
                     curve: ExposureCurve(times: global.curve.times, stops: global.curve.stops, spatial: fields),
                     original: global.original, stablePatches: global.stablePatches[0] ?? 0)
@@ -271,8 +271,8 @@ enum SceneCorrection {
                 let previous = cache[scene.startFrame].flatMap {
                     $0.frameCount == scene.frameCount ? $0.curve.spatial : nil
                 } ?? []
-                let fields = SpatialLighting.estimate(samples: frames, global: global.stops, radius: options.radius,
-                    strength: options.spatialStrength * options.strength, region: options.reference?.rect, previous: previous)
+                let fields = SpatialLighting.estimate(samples: frames, global: global.stops.map { options.strength > 0 ? $0/options.strength : 0 }, radius: options.radius,
+                    strength: options.spatialStrength * options.strength, region: options.reference?.rect, previous: previous, mode: options.mode)
                 let levels = patches.levels.count == range.count ? patches.levels : range.map { source[$0].level }
                 let baseline = ExposureMath.median(levels)
                 entry = CachedScene(settings: options, frameCount: scene.frameCount,
@@ -335,8 +335,8 @@ enum SceneCorrection {
                                       cells: sample.cells, thumbnail: sample.thumbnail)
             }
             let sceneGlobal = Array(stops.suffix(scene.frameCount))
-            spatial += SpatialLighting.estimate(samples: sceneFrames, global: sceneGlobal, radius: options.radius,
-                                                 strength: options.spatialStrength * options.strength, region: options.reference?.rect)
+            spatial += SpatialLighting.estimate(samples: sceneFrames, global: sceneGlobal.map { options.strength > 0 ? $0/options.strength : 0 }, radius: options.radius,
+                                                 strength: options.spatialStrength * options.strength, region: options.reference?.rect, mode: options.mode)
         }
         return ExposureCurve(times: base.map(\.time), stops: stops, spatial: spatial)
     }
