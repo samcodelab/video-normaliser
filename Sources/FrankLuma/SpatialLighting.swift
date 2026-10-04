@@ -59,6 +59,9 @@ enum SpatialLighting {
         let log: [Double]
         let red: [Double]
         let green: [Double]
+        let gradientX: [Double]
+        let gradientY: [Double]
+        let features: [Int]
         init(_ t: SpatialThumbnail) {
             thumb = t; luminance = t.light
             log = luminance.map { log2(max(0.001, $0)) }
@@ -68,26 +71,112 @@ enum SpatialLighting {
             green = stride(from: 0, to: t.rgb.count, by: 3).map { i in
                 Double(t.rgb[i+1]) / max(0.001, Double(t.rgb[i] + t.rgb[i+1] + t.rgb[i+2]))
             }
+            var gx = [Double](repeating: 0, count: luminance.count), gy = gx
+            for y in 1..<(t.height-1) { for x in 1..<(t.width-1) {
+                let p = y*t.width+x
+                gx[p] = log[p+1]-log[p-1]; gy[p] = log[p+t.width]-log[p-t.width]
+            } }
+            gradientX = gx; gradientY = gy
+            var positions: [Int] = []
+            for y in stride(from: 4, to: t.height-4, by: 3) { for x in stride(from: 4, to: t.width-4, by: 3) {
+                let p = y*t.width+x
+                if luminance[p] > 0.02, abs(gx[p])+abs(gy[p]) > 0.03 { positions.append(p) }
+            } }
+            features = positions
+        }
+    }
+
+    private static let sampleBasis = (0..<336).map { p in
+        SpatialField.basis(x: (Double(p % 24)+0.5)/24, y: (Double(p / 24)+0.5)/14, columns: 9, rows: 6)
+    }
+    private static let supportWeights = (0..<54).map { node in
+        (0..<336).map { p in
+            let dx = (Double(p % 24)+0.5)/24-Double(node % 9)/8
+            let dy = (Double(p / 24)+0.5)/14-Double(node / 9)/5
+            return exp(-0.5*(pow(dx/0.12,2)+pow(dy/0.16,2)))
+        }
+    }
+
+    /// Work on independent ranges with a six-frame halo. This reproduces the
+    /// serial neighbour selection while using multiple cores on long shots.
+    static func estimateAsync(samples: [ExposureSample], global: [Double], radius: Double, strength: Double,
+                              region: CGRect? = nil, previous: [SpatialField] = [], chunkSize: Int = 120) async -> [SpatialField] {
+        let chunkSize = max(1, chunkSize)
+        guard samples.count > chunkSize, samples.count == global.count, strength > 0 else {
+            return estimate(samples: samples, global: global, radius: radius, strength: strength, region: region, previous: previous)
+        }
+        let workers = min(6, max(1, ProcessInfo.processInfo.activeProcessorCount / 2))
+        return await withTaskGroup(of: (Int, [SpatialField]).self) { group in
+            var output = [SpatialField](repeating: SpatialField(), count: samples.count)
+            var next = 0
+            func enqueue(_ start: Int) {
+                let end = min(samples.count, start + chunkSize)
+                let lower = max(0, start - 6), upper = min(samples.count, end + 6)
+                group.addTask {
+                    if Task.isCancelled { return (start, []) }
+                    let old = previous.count == samples.count ? previous[lower..<upper].map { field -> SpatialField in
+                        var field = field
+                        field.alignments = field.alignments.map {
+                            SpatialAlignment(reference: $0.reference-lower, dx: $0.dx, dy: $0.dy, error: $0.error, accepted: $0.accepted)
+                        }
+                        return field
+                    } : []
+                    let fields = estimate(samples: Array(samples[lower..<upper]), global: Array(global[lower..<upper]),
+                                          radius: radius, strength: strength, region: region, previous: old)
+                    guard fields.count == upper-lower else { return (start, []) }
+                    return (start, fields[(start-lower)..<(end-lower)].map { field -> SpatialField in
+                        var field = field
+                        field.alignments = field.alignments.map {
+                            SpatialAlignment(reference: $0.reference+lower, dx: $0.dx, dy: $0.dy, error: $0.error, accepted: $0.accepted)
+                        }
+                        return field
+                    })
+                }
+            }
+            for _ in 0..<workers where next < samples.count { enqueue(next); next += chunkSize }
+            for await (start, fields) in group {
+                if Task.isCancelled { group.cancelAll(); continue }
+                for (offset, field) in fields.enumerated() { output[start+offset] = field }
+                if next < samples.count { enqueue(next); next += chunkSize }
+            }
+            return Task.isCancelled ? [] : output
         }
     }
 
     static func estimate(samples: [ExposureSample], global: [Double], radius: Double, strength: Double,
-                         region: CGRect? = nil) -> [SpatialField] {
-        guard samples.count == global.count, samples.allSatisfy({ $0.thumbnail != nil }), strength > 0 else {
-            return samples.map { _ in SpatialField() }
+                         region: CGRect? = nil, previous: [SpatialField] = []) -> [SpatialField] {
+        if Task.isCancelled { return [] }
+        guard !samples.isEmpty, samples.count == global.count, samples.allSatisfy({ $0.thumbnail != nil }), strength > 0 else {
+            let disabled = SpatialField()
+            return samples.map { _ in disabled }
         }
-        let frames = samples.map { Frame($0.thumbnail!) }
-        let w = frames[0].thumb.width, h = frames[0].thumb.height
-        guard w >= 24, h >= 20, frames.allSatisfy({ $0.thumb.width == w && $0.thumb.height == h }) else {
-            return samples.map { _ in SpatialField() }
+        let w = samples[0].thumbnail!.width, h = samples[0].thumbnail!.height
+        guard w >= 24, h >= 20, samples.allSatisfy({ $0.thumbnail!.width == w && $0.thumbnail!.height == h }) else {
+            let disabled = SpatialField()
+            return samples.map { _ in disabled }
+        }
+        // Only the current frame and its six local references need derived
+        // luminance/gradient arrays. Keep that working set bounded on long shots.
+        var frames: [Int: Frame] = [:]
+        func prepare(_ index: Int) {
+            if frames[index] == nil { frames[index] = Frame(samples[index].thumbnail!) }
         }
         var result: [SpatialField] = []
+        result.reserveCapacity(samples.count)
         for i in samples.indices {
+            if Task.isCancelled { return [] }
             var field = SpatialField()
-            let neighbours = samples.indices.filter { $0 != i && samples[$0].segment == samples[i].segment && abs(samples[$0].time - samples[i].time) <= max(0.25, radius) + 0.000001 }
-                .sorted { abs($0-i) < abs($1-i) }.prefix(6)
+            let neighbours = neighbourIndices(samples: samples, index: i, radius: radius)
+            let needed = Set(neighbours + [i])
+            frames = frames.filter { needed.contains($0.key) }
+            for index in needed { prepare(index) }
             for j in neighbours {
-                let shift = register(frames[i], frames[j])
+                if previous.count == samples.count,
+                   let alignment = previous[i].alignments.first(where: { $0.reference == j }) {
+                    field.alignments.append(alignment)
+                    continue
+                }
+                let shift = register(frames[i]!, frames[j]!)
                 field.alignments.append(SpatialAlignment(reference: j, dx: shift.dx, dy: shift.dy, error: shift.error, accepted: shift.accepted))
             }
             let accepted = field.alignments.filter(\.accepted)
@@ -105,13 +194,13 @@ enum SpatialLighting {
                 let x = min(w-3, max(2, Int(nx * Double(w))))
                 let y = min(h-3, max(2, Int(ny * Double(h))))
                 var targets: [Double] = [], offsets: [Double] = [], weights: [Double] = []
-                let patch = (-2...2).flatMap { dy in (-2...2).map { dx in frames[i].luminance[(y+dy)*w+x+dx] } }
+                let patch = (-2...2).flatMap { dy in (-2...2).map { dx in frames[i]!.luminance[(y+dy)*w+x+dx] } }
                 let current = patch.reduce(0,+)/Double(patch.count)
                 spreads[index] = sqrt(patch.map { pow($0-current,2) }.reduce(0,+)/Double(patch.count))
                 field.before[index] = current
                 for alignment in accepted {
                     let j = alignment.reference
-                    let match = compare(frames[i], frames[j], x: x, y: y, dx: alignment.dx, dy: alignment.dy)
+                    let match = compare(frames[i]!, frames[j]!, x: x, y: y, dx: alignment.dx, dy: alignment.dy)
                     if match.confidence > 0 {
                         targets.append(match.delta + global[j] - global[i])
                         offsets.append(match.offset * pow(2, global[j]))
@@ -161,12 +250,9 @@ enum SpatialLighting {
             // Fade unsupported portions smoothly towards global correction.
             // Do not extrapolate a large gain into an occluded/clipped corner.
             for y in 0..<field.rows { for x in 0..<field.columns {
-                let nx = Double(x)/Double(field.columns-1), ny = Double(y)/Double(field.rows-1)
                 var support=0.0, total=0.0
                 for r in 0..<field.sampleRows { for c in 0..<field.sampleColumns {
-                    let dx = (Double(c)+0.5)/Double(field.sampleColumns)-nx
-                    let dy = (Double(r)+0.5)/Double(field.sampleRows)-ny
-                    let weight=exp(-0.5*(pow(dx/0.12,2)+pow(dy/0.16,2)))
+                    let weight = supportWeights[y*field.columns+x][r*field.sampleColumns+c]
                     support += weight*field.confidence[r*field.sampleColumns+c]; total += weight
                 } }
                 let supportWeight = min(1, support/max(0.00001,total)/0.20)
@@ -196,22 +282,41 @@ enum SpatialLighting {
         return result
     }
 
+    static func neighbourIndices(samples: [ExposureSample], index: Int, radius: Double) -> [Int] {
+        let window = max(0.25, radius)+0.000001
+        var neighbours: [Int] = []
+        var distance = 1
+        var leftOpen = true, rightOpen = true
+        while neighbours.count < 6, leftOpen || rightOpen {
+            let left = index-distance, right = index+distance
+            if leftOpen {
+                leftOpen = left >= 0 && samples[left].segment == samples[index].segment && samples[index].time-samples[left].time <= window
+                if leftOpen { neighbours.append(left) }
+            }
+            if rightOpen, neighbours.count < 6 {
+                rightOpen = right < samples.count && samples[right].segment == samples[index].segment && samples[right].time-samples[index].time <= window
+                if rightOpen { neighbours.append(right) }
+            }
+            distance += 1
+        }
+        return neighbours
+    }
+
     /// Bounded translation registration on log-luminance gradients. Large
     /// motion, parallax or rotation that fails this test falls back safely.
     private static func register(_ a: Frame, _ b: Frame) -> (dx: Int, dy: Int, error: Double, accepted: Bool) {
         let w = a.thumb.width, h = a.thumb.height
         func cost(_ dx: Int, _ dy: Int) -> Double {
             var sum = 0.0, count = 0
-            for y in stride(from: 4, to: h-4, by: 3) { for x in stride(from: 4, to: w-4, by: 3) {
+            for p in a.features {
+                let y = p/w, x = p % w
                 let xx=x+dx, yy=y+dy
                 guard xx>1, xx<w-2, yy>1, yy<h-2 else { continue }
-                let p=y*w+x, q=yy*w+xx
-                guard a.luminance[p]>0.02, b.luminance[q]>0.02 else { continue }
-                let gx=a.log[p+1]-a.log[p-1], gy=a.log[p+w]-a.log[p-w]
-                guard abs(gx)+abs(gy)>0.03 else { continue }
-                let residual=abs(gx-(b.log[q+1]-b.log[q-1]))+abs(gy-(b.log[q+w]-b.log[q-w]))
+                let q=yy*w+xx
+                guard b.luminance[q]>0.02 else { continue }
+                let residual=abs(a.gradientX[p]-b.gradientX[q])+abs(a.gradientY[p]-b.gradientY[q])
                 sum += min(0.3,residual); count += 1
-            } }
+            }
             return count >= 12 ? sum/Double(count) : 0.3
         }
         var best=(dx:0,dy:0,error:cost(0,0))
@@ -298,7 +403,7 @@ enum SpatialLighting {
         for r in 0..<field.sampleRows { for c in 0..<field.sampleColumns {
             let p=r*field.sampleColumns+c
             guard field.confidence[p] > 0 else { continue }
-            let basis=SpatialField.basis(x:(Double(c)+0.5)/Double(field.sampleColumns), y:(Double(r)+0.5)/Double(field.sampleRows), columns:field.columns, rows:field.rows)
+            let basis = sampleBasis[p]
             let light=field.before[p]*globalGain
             let gain=pow(2,field.requested[p])-1
             let meanTerms=basis.map { ($0.0,$0.1*light*4) } + basis.map { ($0.0+nodes,$0.1) }
@@ -340,7 +445,7 @@ enum SpatialLighting {
             for r in 0..<field.sampleRows { for c in 0..<field.sampleColumns {
                 let p=r*field.sampleColumns+c
                 guard field.confidence[p]>0 else { continue }
-                let basis=SpatialField.basis(x:(Double(c)+0.5)/Double(field.sampleColumns),y:(Double(r)+0.5)/Double(field.sampleRows),columns:field.columns,rows:field.rows)
+                let basis = sampleBasis[p]
                 let prediction=basis.reduce(0) { $0+solution[$1.0]*$1.1 }
                 let error=abs(prediction-field.requested[p])
                 let robust=iteration==0 ? 1 : min(1,0.08/max(0.0001,error))

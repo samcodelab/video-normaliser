@@ -54,6 +54,34 @@ enum PreviewTiming {
 }
 
 enum SceneDetection {
+    /// A changing foreground can rearrange most of the image over successive
+    /// stop-motion frames. During that motion, require a change in the colour
+    /// population as well as structure before declaring another automatic cut.
+    static func isCut(preceding: FrameAppearance?, previous: FrameAppearance, current: FrameAppearance, following: [FrameAppearance] = []) -> Bool {
+        guard isCut(previous: previous, current: current) else { return false }
+        guard let preceding else { return true }
+        let changes = zip(preceding.luminance, previous.luminance).filter {
+            $0 > 0.015 && $1 > 0.015 && $0 < 0.92 && $1 < 0.92
+        }.map { log2($1 / $0) }
+        let exposure = ExposureMath.median(changes)
+        let ongoingMotion = ExposureMath.median(changes.map { abs($0 - exposure) }) > 0.28
+        guard ongoingMotion else { return true }
+        let colourChange = zip(previous.chromaticity, current.chromaticity).map { abs($0 - $1) }.reduce(0, +) / 2
+        guard colourChange <= 0.45, following.count == 2 else { return true }
+        // Preserve a new shot that settles after its first moving frame.
+        // Suppress only candidates surrounded by sustained structural motion.
+        var previousFrame = current
+        for next in following {
+            let changes = zip(previousFrame.luminance, next.luminance).filter {
+                $0 > 0.015 && $1 > 0.015 && $0 < 0.92 && $1 < 0.92
+            }.map { log2($1 / $0) }
+            let exposure = ExposureMath.median(changes)
+            if ExposureMath.median(changes.map { abs($0 - exposure) }) <= 0.28 { return true }
+            previousFrame = next
+        }
+        return false
+    }
+
     static func isCut(previous: FrameAppearance, current: FrameAppearance) -> Bool {
         let pairs = zip(previous.luminance, current.luminance).filter {
             $0 > 0.015 && $1 > 0.015 && $0 < 0.92 && $1 < 0.92
@@ -155,6 +183,110 @@ enum TimelineMath {
 }
 
 enum SceneCorrection {
+    struct CachedScene: Sendable {
+        let settings: SceneSettings
+        let frameCount: Int
+        let curve: ExposureCurve
+        let original: [Double]
+        let stablePatches: Int
+    }
+
+    struct Calculation: Sendable {
+        let curve: ExposureCurve
+        let original: [Double]
+        let stablePatches: [Int: Int]
+        let cache: [Int: CachedScene]
+    }
+
+    static func calculateAsync(base: [ExposureSample], boundaries: Set<Int>, settings: [Int: SceneSettings],
+                               references: [ReferenceRegion: [ExposureSample]], cache: [Int: CachedScene]) async -> Calculation {
+        var updated: [Int: CachedScene] = [:]
+        var stops: [Double] = [], spatial: [SpatialField] = [], original: [Double] = []
+        var counts: [Int: Int] = [:]
+        for scene in SceneMath.scenes(samples: base, boundaries: boundaries, duration: base.last?.time ?? 0) {
+            if Task.isCancelled { break }
+            let options = settings[scene.startFrame] ?? SceneSettings()
+            let entry: CachedScene
+            if let previous = cache[scene.startFrame], previous.settings == options, previous.frameCount == scene.frameCount {
+                entry = previous
+            } else {
+                let range = scene.startFrame..<(scene.startFrame + scene.frameCount)
+                let frames = range.map { index in
+                    let sample = base[index]
+                    return ExposureSample(time: sample.time, level: sample.level, segment: 0, cells: sample.cells, thumbnail: sample.thumbnail)
+                }
+                let reference = options.reference.flatMap { references[$0] }.flatMap { $0.count == base.count ? Array($0[range]) : nil }
+                let localReferences = options.reference.flatMap { region in reference.map { [region: $0] } } ?? [:]
+                var globalOptions = options; globalOptions.spatialStrength = 0
+                let global = calculate(base: frames, boundaries: [], settings: [0: globalOptions], references: localReferences, cache: [:])
+                if Task.isCancelled { break }
+                let previous = cache[scene.startFrame].flatMap { $0.frameCount == scene.frameCount ? $0.curve.spatial : nil } ?? []
+                let fields = await SpatialLighting.estimateAsync(samples: frames, global: global.curve.stops, radius: options.radius,
+                    strength: options.spatialStrength * options.strength, region: options.reference?.rect, previous: previous)
+                entry = CachedScene(settings: options, frameCount: scene.frameCount,
+                    curve: ExposureCurve(times: global.curve.times, stops: global.curve.stops, spatial: fields),
+                    original: global.original, stablePatches: global.stablePatches[0] ?? 0)
+            }
+            updated[scene.startFrame] = entry
+            stops += entry.curve.stops; spatial += entry.curve.spatial; original += entry.original
+            counts[scene.startFrame] = entry.stablePatches
+        }
+        return Calculation(curve: ExposureCurve(times: base.map(\.time), stops: stops, spatial: spatial),
+                           original: original, stablePatches: counts, cache: updated)
+    }
+
+    /// Reuse unchanged shots when an inspector edit affects only one scene.
+    /// The caller invalidates this cache whenever analysis/reference data changes.
+    static func calculate(base: [ExposureSample], boundaries: Set<Int>, settings: [Int: SceneSettings],
+                          references: [ReferenceRegion: [ExposureSample]], cache: [Int: CachedScene]) -> Calculation {
+        var updated: [Int: CachedScene] = [:]
+        var stops: [Double] = [], spatial: [SpatialField] = [], original: [Double] = []
+        var counts: [Int: Int] = [:]
+        for scene in SceneMath.scenes(samples: base, boundaries: boundaries, duration: base.last?.time ?? 0) {
+            if Task.isCancelled { break }
+            let options = settings[scene.startFrame] ?? SceneSettings()
+            let entry: CachedScene
+            if let previous = cache[scene.startFrame], previous.settings == options, previous.frameCount == scene.frameCount {
+                entry = previous
+            } else {
+                let range = scene.startFrame..<(scene.startFrame + scene.frameCount)
+                let reference = options.reference.flatMap { references[$0] } ?? base
+                let source = reference.count == base.count ? reference : base
+                let patches = PatchExposure(cells: range.map { source[$0].cells })
+                let times = range.map { base[$0].time }
+                let global: ExposureCurve
+                if !source[scene.startFrame].cells.isEmpty {
+                    global = patches.curve(times: times, radius: options.radius, strength: options.strength, mode: options.mode)
+                } else {
+                    global = ExposureMath.curve(samples: range.map {
+                        ExposureSample(time: base[$0].time, level: source[$0].level, segment: 0)
+                    }, radius: options.radius, strength: options.strength, mode: options.mode)
+                }
+                let frames = range.map { index in
+                    let sample = base[index]
+                    return ExposureSample(time: sample.time, level: sample.level, segment: 0,
+                                          cells: sample.cells, thumbnail: sample.thumbnail)
+                }
+                if Task.isCancelled { break }
+                let previous = cache[scene.startFrame].flatMap {
+                    $0.frameCount == scene.frameCount ? $0.curve.spatial : nil
+                } ?? []
+                let fields = SpatialLighting.estimate(samples: frames, global: global.stops, radius: options.radius,
+                    strength: options.spatialStrength * options.strength, region: options.reference?.rect, previous: previous)
+                let levels = patches.levels.count == range.count ? patches.levels : range.map { source[$0].level }
+                let baseline = ExposureMath.median(levels)
+                entry = CachedScene(settings: options, frameCount: scene.frameCount,
+                    curve: ExposureCurve(times: times, stops: global.stops, spatial: fields),
+                    original: levels.map { $0 - baseline }, stablePatches: patches.values.first?.count ?? 0)
+            }
+            updated[scene.startFrame] = entry
+            stops += entry.curve.stops; spatial += entry.curve.spatial; original += entry.original
+            counts[scene.startFrame] = entry.stablePatches
+        }
+        return Calculation(curve: ExposureCurve(times: base.map(\.time), stops: stops, spatial: spatial),
+                           original: original, stablePatches: counts, cache: updated)
+    }
+
     static func exposure(base: [ExposureSample], boundaries: Set<Int>, settings: [Int: SceneSettings],
                          references: [ReferenceRegion: [ExposureSample]], curve: ExposureCurve) -> ExposureComparison {
         let scenes = SceneMath.scenes(samples: base, boundaries: boundaries, duration: base.last?.time ?? 0)

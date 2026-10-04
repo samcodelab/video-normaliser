@@ -28,7 +28,13 @@ final class AppModel: ObservableObject {
     @Published var url: URL?
     @Published var info: VideoInfo?
     @Published var player = AVPlayer()
-    @Published var result: AnalysisResult?
+    @Published var result: AnalysisResult? {
+        didSet { correctionCache = [:] }
+    }
+    @Published private(set) var correctionPending = false
+    private var correctionTask: Task<Void, Never>?
+    private var correctionGeneration = 0
+    private var correctionCache: [Int: SceneCorrection.CachedScene] = [:]
     @Published var curve = ExposureCurve.empty
     @Published var exposureComparison = ExposureComparison.empty
     @Published var sceneBoundaries: Set<Int> = []
@@ -196,7 +202,9 @@ final class AppModel: ObservableObject {
                     referenceResults = [:]
                 }
                 setPlayhead(playhead)
+                activity = "Calculating scene correction"; progress = 0.95
                 updateCurve()
+                await correctionTask?.value
             } catch is CancellationError { }
             catch { self.error = error.localizedDescription }
             activity = nil
@@ -231,11 +239,14 @@ final class AppModel: ObservableObject {
                 guard analysis.samples.map(\.time) == result?.samples.map(\.time) else {
                     throw VideoError.message("The source video changed. Open it again before setting a reference.")
                 }
+                correctionCache = [:]
                 referenceResults[reference] = analysis.samples
                 var options = sceneSettings[targetScene] ?? defaults
                 options.reference = reference
                 sceneSettings[targetScene] = options
+                activity = "Calculating scene correction"; progress = 0.95
                 updateCurve()
+                await correctionTask?.value
             } catch is CancellationError { }
             catch { self.error = error.localizedDescription }
             activity = nil
@@ -244,19 +255,31 @@ final class AppModel: ObservableObject {
 
     func updateCurve(markEdited: Bool = true) {
         guard let result else { return }
-        curve = SceneCorrection.curve(base: result.samples, boundaries: sceneBoundaries,
-                                      settings: sceneSettings, references: referenceResults)
-        exposureComparison = SceneCorrection.exposure(base: result.samples, boundaries: sceneBoundaries,
-                                                      settings: sceneSettings, references: referenceResults, curve: curve)
-        stablePatchCounts = Dictionary(uniqueKeysWithValues: scenes.map { scene in
-            let reference = sceneSettings[scene.startFrame]?.reference
-            let source = reference.flatMap { referenceResults[$0] } ?? result.samples
-            let frames = source[scene.startFrame..<(scene.startFrame + scene.frameCount)]
-            return (scene.startFrame, PatchExposure(cells: frames.map(\.cells)).values.first?.count ?? 0)
-        })
+        correctionTask?.cancel()
+        correctionGeneration += 1
+        let generation = correctionGeneration
+        let base = result.samples, boundaries = sceneBoundaries, settings = sceneSettings
+        let references = referenceResults, cache = correctionCache
+        correctionPending = true
         exportedURL = nil
-        updatePreview()
         if markEdited { projectEdited() }
+        correctionTask = Task { [weak self] in
+            // Coalesce slider events before starting an expensive calculation.
+            do { try await Task.sleep(for: .milliseconds(120)) } catch { return }
+            let worker = Task.detached(priority: .userInitiated) {
+                await SceneCorrection.calculateAsync(base: base, boundaries: boundaries, settings: settings,
+                                                     references: references, cache: cache)
+            }
+            let calculation = await withTaskCancellationHandler { await worker.value } onCancel: { worker.cancel() }
+            guard !Task.isCancelled, let self, self.correctionGeneration == generation else { return }
+            self.curve = calculation.curve
+            self.exposureComparison = ExposureComparison(times: calculation.curve.times, original: calculation.original,
+                corrected: zip(calculation.original, calculation.curve.stops).map(+))
+            self.stablePatchCounts = calculation.stablePatches
+            self.correctionCache = calculation.cache
+            self.correctionPending = false
+            self.updatePreview()
+        }
     }
 
     func splitAtPlayhead() {
@@ -398,6 +421,7 @@ final class AppModel: ObservableObject {
     }
 
     func exportDiagnostics() {
+        guard !correctionPending else { return }
         guard let result, let url, !busy else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
@@ -433,7 +457,7 @@ final class AppModel: ObservableObject {
     }
 
     func export() {
-        guard let asset, let url, result != nil, !busy else { return }
+        guard let asset, let url, result != nil, !busy, !correctionPending else { return }
         let panel = NSSavePanel()
         let selection = ExportSelection(options: exportOptions)
         let baseName = url.deletingPathExtension().lastPathComponent + " — Normalised"
@@ -511,7 +535,10 @@ final class AppModel: ObservableObject {
         open(demo)
     }
 
-    func cancel() { task?.cancel() }
+    func cancel() {
+        task?.cancel(); correctionTask?.cancel(); correctionGeneration += 1
+        correctionPending = false
+    }
 }
 
 
@@ -701,6 +728,7 @@ extension AppModel {
                 referenceResults = references; selectedSceneStart = 0
                 installVideo(asset: AVURLAsset(url: sourceURL), url: sourceURL, info: info, access: sourceScope)
                 updateCurve(markEdited: false)
+                await correctionTask?.value
                 seek(toTime: document.playhead)
                 installingProject = false
                 projectHasChanges = id != nil || relinked
@@ -753,7 +781,11 @@ extension AppModel {
         refreshRecoveryAvailability()
     }
 
-    func finishSession() { clearCheckpoint() }
+    func finishSession() {
+        correctionTask?.cancel(); correctionGeneration += 1
+        correctionPending = false; correctionCache = [:]
+        clearCheckpoint()
+    }
 
     func closeSession() {
         finishSession()

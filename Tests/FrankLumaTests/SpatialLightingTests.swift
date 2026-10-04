@@ -15,6 +15,58 @@ final class SpatialLightingTests: XCTestCase {
         } }
         return SpatialThumbnail(width:w,height:h,rgb:rgb)
     }
+    func testNeighbourSearchIsBoundedAndStaysInsideSceneAndRadius() {
+        let samples = (0..<240).map { ExposureSample(time: Double($0)/12, level: 0, segment: $0 < 120 ? 0 : 1) }
+        for index in samples.indices {
+            for radius in [0.1, 0.5, 3.0] {
+                let neighbours = SpatialLighting.neighbourIndices(samples: samples, index: index, radius: radius)
+                let expected = samples.indices.filter {
+                    $0 != index && samples[$0].segment == samples[index].segment
+                    && abs(samples[$0].time - samples[index].time) <= max(0.25, radius) + 0.000001
+                }.sorted {
+                    let left = abs($0-index), right = abs($1-index)
+                    return left == right ? $0 < $1 : left < right
+                }
+                XCTAssertEqual(neighbours, Array(expected.prefix(6)))
+            }
+        }
+        XCTAssertTrue(SpatialLighting.estimate(samples: [], global: [], radius: 0.5, strength: 1).isEmpty)
+    }
+
+    func testCachedAlignmentMatchesFreshCalculationAfterRadiusAndModeChange() {
+        let samples = (0..<9).map { i in
+            ExposureSample(time: Double(i)/12, level: 0, segment: 0,
+                           thumbnail: thumbnail(exposure: { _, y in i == 4 ? -0.3*y : 0 }, shift: i-4))
+        }
+        let first = SpatialLighting.estimate(samples: samples, global: Array(repeating: 0, count: 9), radius: 0.1, strength: 1)
+        let global = (0..<9).map { $0 == 4 ? 0.1 : 0.0 }
+        let reused = SpatialLighting.estimate(samples: samples, global: global, radius: 1, strength: 0.7, previous: first)
+        let fresh = SpatialLighting.estimate(samples: samples, global: global, radius: 1, strength: 0.7)
+        for i in samples.indices {
+            XCTAssertEqual(reused[i].stops, fresh[i].stops)
+            XCTAssertEqual(reused[i].offsets, fresh[i].offsets)
+            XCTAssertEqual(reused[i].fallback, fresh[i].fallback)
+            XCTAssertEqual(reused[i].alignments.map(\.reference), fresh[i].alignments.map(\.reference))
+        }
+    }
+
+    func testParallelRangesMatchSerialWithCachedReferencesAcrossChunkEdges() async {
+        let samples = (0..<12).map { i in ExposureSample(time: Double(i)/12, level: 0, segment: 0,
+            thumbnail: thumbnail(exposure: { _, y in i == 6 ? -0.3*y : 0 }, shift: i-6)) }
+        let global = Array(repeating: 0.0, count: 12)
+        let serial = SpatialLighting.estimate(samples: samples, global: global, radius: 1, strength: 1)
+        let parallel = await SpatialLighting.estimateAsync(samples: samples, global: global, radius: 1, strength: 1, chunkSize: 3)
+        let cached = await SpatialLighting.estimateAsync(samples: samples, global: global, radius: 1, strength: 1, previous: serial, chunkSize: 3)
+        for fields in [parallel, cached] {
+            XCTAssertEqual(fields.count, serial.count)
+            for i in serial.indices {
+                XCTAssertEqual(fields[i].stops, serial[i].stops)
+                XCTAssertEqual(fields[i].offsets, serial[i].offsets)
+                XCTAssertEqual(fields[i].alignments.map(\.reference), serial[i].alignments.map(\.reference))
+            }
+        }
+    }
+
     func testUniformFlickerLeavesNoSpatialResidualAfterGlobalCorrection() {
         let frames=(0..<7).map { i in thumbnail(exposure: { _,_ in i == 3 ? -0.4 : 0 }) }
         let samples=frames.enumerated().map { ExposureSample(time:Double($0.offset)/12,level:0,segment:0,thumbnail:$0.element) }

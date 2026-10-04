@@ -30,7 +30,7 @@ struct FrankLumaApp: App {
                 Button("Open Video…", action: model.chooseVideo).keyboardShortcut("o").disabled(model.busy)
                 Button("Open Project…", action: model.chooseProject).keyboardShortcut("o", modifiers: [.command, .shift]).disabled(model.busy)
                 Button("Export Corrected Video…", action: model.export).keyboardShortcut("e", modifiers: [.command, .shift])
-                    .disabled(model.busy || model.result == nil)
+                    .disabled(model.busy || model.correctionPending || model.result == nil)
             }
             CommandGroup(replacing: .saveItem) {
                 Button("Save Project") { model.saveProject() }.keyboardShortcut("s")
@@ -106,7 +106,7 @@ struct ContentView: View {
                 Button { model.saveProject() } label: { Label("Save Project", systemImage: "square.and.arrow.down") }
                     .help("Save editable settings (⌘S)").disabled(model.result == nil || model.busy)
                 Button(action: model.export) { Label("Export…", systemImage: "square.and.arrow.up") }
-                    .help("Export corrected video (⇧⌘E)").disabled(model.result == nil || model.busy)
+                    .help("Export corrected video (⇧⌘E)").disabled(model.result == nil || model.busy || model.correctionPending)
             }
             ToolbarItem(placement: .primaryAction) {
                 Button { showInspector.toggle() } label: { Label("Inspector", systemImage: "sidebar.right") }
@@ -249,6 +249,10 @@ struct ContentView: View {
                         Text(field.fallback ?? (field.offsets.contains { abs($0) > 0.003 } ? "Local exposure and tone correction" : String(format: "Local adjustment up to %.2f EV", field.peak)))
                             .font(.system(size: 11)).foregroundStyle(field.fallback == nil ? muted : .orange)
                     }
+                    if !model.correctionPending, let count = model.stablePatchCounts[model.selectedSceneStart], count < 12 {
+                        Text("Too little stable background for global correction. Select a static reference area, or review this scene’s cuts.")
+                            .font(.system(size: 11)).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                    }
                     Image(systemName: "info.circle")
                         .foregroundStyle(muted)
                         .help("Tone correction matches background brightness and contrast, with protection for deep shadows and highlights. Unsupported areas fall back towards global exposure.")
@@ -276,7 +280,7 @@ struct ContentView: View {
                 if let result = model.result {
                     DisclosureGroup("Diagnostics") {
                         VStack(alignment: .leading, spacing: 8) {
-                            Button("Save diagnostics…", action: model.exportDiagnostics).disabled(model.busy)
+                            Button("Save diagnostics…", action: model.exportDiagnostics).disabled(model.busy || model.correctionPending)
                             Text("Gain/offset fields and confidence. Mean estimates exclude pixel-level protection; check encoded output separately.")
                                 .foregroundStyle(muted)
                         }.font(.system(size: 11)).padding(.top, 8)
@@ -359,6 +363,10 @@ struct ContentView: View {
                 Text("\(Int(model.progress * 100))%").font(.system(size: 10, design: .monospaced)).foregroundStyle(muted)
                 Spacer()
                 Button("Cancel", action: model.cancel).controlSize(.small)
+            } else if model.correctionPending {
+                ProgressView().controlSize(.small)
+                Text("Updating correction…").font(.system(size: 11))
+                Spacer()
             } else if let warning = model.recoveryWarning {
                 Text(warning).font(.system(size: 11)).foregroundStyle(.orange).lineLimit(1).help(warning)
                 Spacer()

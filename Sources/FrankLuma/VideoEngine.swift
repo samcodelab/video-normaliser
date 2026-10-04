@@ -121,8 +121,18 @@ enum VideoEngine {
         let width = 48, height = 32
         var pixels = [UInt8](repeating: 0, count: width * height * 4)
         var samples: [ExposureSample] = []
-        var previousAppearance: FrameAppearance?
-        var segment = 0
+        var appearances: [(index: Int, frame: FrameAppearance)] = []
+        var detectedBoundaries: Set<Int> = []
+        func checkBoundary(_ index: Int) {
+            guard index > 0,
+                  let previous = appearances.first(where: { $0.index == index-1 })?.frame,
+                  let current = appearances.first(where: { $0.index == index })?.frame else { return }
+            let preceding = appearances.first(where: { $0.index == index-2 })?.frame
+            let following = appearances.filter { $0.index > index }.prefix(2).map(\.frame)
+            if SceneDetection.isCut(preceding: preceding, previous: previous, current: current, following: following) {
+                detectedBoundaries.insert(index)
+            }
+        }
         while let buffer = output.copyNextSampleBuffer() {
             try Task.checkCancellation()
             try autoreleasepool {
@@ -180,17 +190,22 @@ enum VideoEngine {
                     rgb[(y*96+x)*3+channel] = value
                 } } }
                 let spatialThumbnail = SpatialThumbnail(width: 96, height: 56, rgb: rgb)
-                let cut = previousAppearance.map { SceneDetection.isCut(previous: $0, current: wholeFrame) } ?? false
-                if cut { segment += 1 }
-                previousAppearance = wholeFrame
                 let time = CMSampleBufferGetPresentationTimeStamp(buffer).seconds
-                samples.append(ExposureSample(time: time, level: 0, segment: segment, cells: patches, thumbnail: spatialThumbnail))
+                samples.append(ExposureSample(time: time, level: 0, segment: 0, cells: patches, thumbnail: spatialThumbnail))
+                // Two frames of lookahead distinguish a stable new shot from
+                // continued subject motion. Retain only five tiny descriptors.
+                appearances.append((samples.count - 1, wholeFrame))
+                if appearances.count > 5 { appearances.removeFirst() }
+                checkBoundary(samples.count - 3)
                 if samples.count.isMultiple(of: 12) { progress(min(1, time / duration)) }
             }
         }
         try Task.checkCancellation()
         if reader.status == .failed { throw reader.error ?? VideoError.message("Video decoding failed.") }
         guard samples.count > 1 else { throw VideoError.message("At least two video frames are needed for analysis.") }
+        checkBoundary(samples.count - 2)
+        checkBoundary(samples.count - 1)
+        samples = SceneMath.assign(samples, boundaries: detectedBoundaries)
         progress(1)
         var measured: [ExposureSample] = []
         var uncertain = 0
@@ -202,7 +217,7 @@ enum VideoEngine {
                 ExposureSample(time: sample.time, level: patches.levels[index], segment: sample.segment, cells: sample.cells, thumbnail: sample.thumbnail)
             }
         }
-        return AnalysisResult(samples: measured, uncertainFrames: uncertain, cuts: segment)
+        return AnalysisResult(samples: measured, uncertainFrames: uncertain, cuts: detectedBoundaries.count)
     }
 
     static func composition(asset: AVAsset, curve: ExposureCurve, diagnostic: PreviewMode = .corrected) -> AVVideoComposition {

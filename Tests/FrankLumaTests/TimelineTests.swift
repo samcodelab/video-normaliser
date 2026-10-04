@@ -76,6 +76,43 @@ final class TimelineTests: XCTestCase {
         XCTAssertEqual(TimelineMath.clampedBoundary(99, moving: 30, boundaries: cuts, frameCount: 40), 39)
     }
 
+    func testSceneCacheInvalidatesChangedSettingsAndBoundaryRanges() {
+        let samples = (0..<48).map { ExposureSample(time: Double($0)/12, level: Double($0)*0.01 + ($0.isMultiple(of: 2) ? 0.2 : -0.2), segment: 0) }
+        let first = SceneSettings(radius: 0.1), second = SceneSettings(mode: .steady)
+        let initial = SceneCorrection.calculate(base: samples, boundaries: [24], settings: [0: first, 24: second], references: [:], cache: [:])
+        var changed = second; changed.strength = 0.4
+        for boundary in [24, 30] {
+            let settings = [0: first, boundary: changed]
+            let cached = SceneCorrection.calculate(base: samples, boundaries: [boundary], settings: settings, references: [:], cache: initial.cache)
+            let fresh = SceneCorrection.curve(base: samples, boundaries: [boundary], settings: settings, references: [:])
+            XCTAssertEqual(cached.curve.stops, fresh.stops)
+            XCTAssertEqual(Set(cached.cache.keys), Set([0, boundary]))
+        }
+    }
+
+    @MainActor
+    func testRapidSettingsChangesInstallOnlyLatestCurveAndCloseCancelsIt() async throws {
+        let model = AppModel()
+        let samples = (0..<120).map { ExposureSample(time: Double($0)/12, level: $0.isMultiple(of: 2) ? 0.3 : -0.3, segment: 0) }
+        model.result = AnalysisResult(samples: samples, uncertainFrames: 0, cuts: 0)
+        model.strength = 0.9; model.radius = 2; model.mode = .steady; model.strength = 0.25
+        XCTAssertTrue(model.correctionPending)
+        // The call must yield immediately so a UI heartbeat can run.
+        await Task.yield()
+        for _ in 0..<100 {
+            if !model.correctionPending { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertFalse(model.correctionPending)
+        let expected = SceneCorrection.curve(base: samples, boundaries: [], settings: model.sceneSettings, references: [:])
+        XCTAssertEqual(model.curve.stops, expected.stops)
+        model.radius = 0.1
+        model.closeSession()
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertFalse(model.correctionPending)
+        XCTAssertTrue(model.curve.stops.isEmpty)
+    }
+
     func testSettingsAffectOnlyTheirOwnScene() {
         let samples = (0..<48).map { ExposureSample(time: Double($0) / 24, level: $0.isMultiple(of: 2) ? 0.3 : -0.3, segment: 0) }
         let normal = SceneSettings(strength: 1, radius: 0.5, mode: .steady)

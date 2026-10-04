@@ -168,3 +168,25 @@ See `docs/app-store/STATUS.md` for remaining account and device work. Intel hard
 ### Live website verification — 4 October 2026
 
 The previously missing pages are now live: https://broadframestudio.com/frankluma/privacy/ and https://broadframestudio.com/frankluma/help/ return HTTP 200 over HTTPS. Their index.html URLs return HTTP 308 redirects to those canonical URLs, so the existing in-app privacy link works. The live policy matches local processing, project/bookmark metadata and recovery storage, and both pages provide the correct support email. All 26 linked pages/assets checked with curl returned HTTP 200. This supersedes the earlier website-publication blocker; no website source or deployment changes were made during verification. Mailbox delivery was not tested.
+
+
+### Performance and real-footage verification — 4 October 2026
+
+Settings previously recalculated every scene synchronously on the UI thread. Correction now runs off the main actor, coalesces slider changes for 120 ms, cancels superseded work and installs only the latest generation. The UI reports updating correction; movie/diagnostic export waits for a current curve. Project changes and recovery settings are recorded immediately. Unchanged scene results and existing frame registrations are reused; moving a boundary invalidates the affected range. Closing/replacing a session prevents an old calculation from repopulating it.
+
+Spatial estimation finds at most six local neighbours without scanning the whole scene for each frame. Derived luminance/gradient arrays are retained only for the current frame and neighbours. Long shots use up to six worker tasks, processing 120-frame chunks with six-frame halos. Tests confirm the same correction values and reference indices as serial processing, including reuse across chunk boundaries. This bounds temporary per-worker frame preparation; stored thumbnails and correction fields still grow with video length.
+
+Local optimized-engine stress measurements used distinct 96×56 thumbnails from the supplied footage, repeated into one 12 fps shot. Decoding/export time is excluded. The serial comparison already includes bounded neighbour/frame preparation; the parallel timing measures the additional multi-core improvement. These timings are observations on this Mac under concurrent test load, not product performance guarantees.
+
+| Analysis workload | Serial initial | Parallel initial | Serial radius edit | Parallel radius edit | Serial mode edit | Parallel mode edit |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 minute / 720 frames | 4.75 s | 1.13 s | 3.35 s | 0.84 s | 3.31 s | 0.81 s |
+| 20 minutes / 14,400 frames | 96.62 s | 22.07 s | 70.77 s | 17.34 s | 68.41 s | 16.67 s |
+
+`My_Stop_Motion_Movie(22).mov` in Downloads is 3840×2160, 12 fps, 17.667 seconds, 212 frames. The original detector returned 16 cuts, including six spurious cuts during the rotating Hulk close-up. Two-frame lookahead now suppresses structural-only candidates surrounded by continuing motion while preserving the checked camera cuts, including frame 85. Ten boundaries remain: 10, 21, 45, 66, 75, 85, 107, 157, 174, 180. Only five small appearance descriptors are retained during detection. Very rapid same-colour edits during movement can remain ambiguous; reviewed/manual boundaries remain authoritative.
+
+The moving close-up at 13.083–14.5 seconds still has insufficient stable background for global correction, and many of its spatial registrations fail. The inspector now explains insufficient global support and directs the user to a static reference or scene review. Do not claim this footage is completely corrected. A fresh analysis uses the revised detector; saved/reviewed project boundaries are preserved. The performance-only optimization produced exactly identical spatial diagnostics to the previous engine on all 17 original scene slices.
+
+All 69 hosted tests passed, including project reference restoration, export codecs/timing/audio, latest-setting installation, cache invalidation and parallel/serial equivalence. Evidence: `.build/release-tests/Logs/Test/Test-FrankLuma-2026.10.04_22-04-52-+1100.xcresult`. The actual clip was exported to an ignored review MP4 and reanalysed: 3840×2160, 17.667 seconds, 212 frames. An optimized app builds successfully at `.build/performance-release/Build/Products/Release/FrankLuma.app`. User footage, generated frames, measurements and review movies remain in ignored `.build/performance/` and are not committed.
+
+A real 10–20 minute 4K decode/export test, manual UI checks in the updated sandboxed build, macOS 14 checks and a new numbered Store archive remain release work. Full-resolution decode has not been optimized in this change; thumbnail/proxy decoding and further caching are candidates if that phase remains slow.

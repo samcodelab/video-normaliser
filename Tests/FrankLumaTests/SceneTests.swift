@@ -30,6 +30,23 @@ final class SceneTests: XCTestCase {
                                             current: FrameAppearance(luminance: moved, chromaticity: [0.7, 0.3])))
     }
 
+    func testContinuousLargeSubjectMotionDoesNotCreateRepeatedCuts() {
+        let light = Array(repeating: 0.1, count: 50) + Array(repeating: 0.6, count: 50)
+        let first = FrameAppearance(luminance: light, chromaticity: [0.7, 0.3])
+        let moved = FrameAppearance(luminance: light.reversed(), chromaticity: [0.6, 0.4])
+        XCTAssertTrue(SceneDetection.isCut(preceding: first, previous: first, current: moved),
+                      "A structural cut from a stable shot must still be detected")
+        XCTAssertFalse(SceneDetection.isCut(preceding: first, previous: moved, current: first, following: [moved, first]),
+                       "Continuing subject motion must not fragment a shot")
+        XCTAssertTrue(SceneDetection.isCut(preceding: first, previous: moved, current: first, following: [first, first]),
+                      "A stable new shot must still cut after subject motion")
+        XCTAssertTrue(SceneDetection.isCut(preceding: first, previous: moved, current: first, following: [moved, moved]),
+                      "A new shot that settles after an initial movement must still cut")
+        let differentScene = FrameAppearance(luminance: light, chromaticity: [0, 1])
+        XCTAssertTrue(SceneDetection.isCut(preceding: first, previous: moved, current: differentScene),
+                      "A different-colour scene must still cut during motion")
+    }
+
     func testBothModesKeepSceneBaselinesIndependent() {
         let first = (0..<24).map { ExposureSample(time: Double($0) / 24, level: $0.isMultiple(of: 2) ? 0.2 : -0.2, segment: 0) }
         let second = (24..<48).map { ExposureSample(time: Double($0) / 24, level: $0.isMultiple(of: 2) ? 4.3 : 3.7, segment: 1) }

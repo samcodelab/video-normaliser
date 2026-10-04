@@ -12,6 +12,12 @@
 
 Package: `.release/app-store-build-3-final/export/FrankLuma.pkg` (ignored build artifact, on this Mac). No upload, TestFlight distribution or review submission has occurred.
 
+## Performance changes after the build 3 archive
+
+The current source includes background/debounced correction, reuse of unchanged scenes and registrations, bounded local frame preparation, parallel correction on long shots, and motion-aware scene-cut confirmation. The hosted suite now passes 69 tests. The supplied 4K/12 fps clip was analysed, exported and reanalysed with all 212 frames and its original dimensions/duration preserved. An optimized local app is in `.build/performance-release/Build/Products/Release/FrankLuma.app`.
+
+The existing Store package predates these changes. Create and validate a new numbered archive/export before uploading; do not use the old build 3 package as evidence for the updated source. Correction stress tests cover a 20-minute analysis workload, not decoding/exporting a real 20-minute 4K source. See the performance verification notes in `docs/RELEASING.md`.
+
 ## Live website verified — 4 October 2026
 
 Both pages now return HTTP 200 over HTTPS. The index.html URLs redirect with HTTP 308 to the canonical trailing-slash URLs. The privacy policy matches local processing, project/bookmark metadata and recovery storage; both pages provide support@broadframestudio.com. Use these canonical URLs in App Store Connect:

@@ -54,6 +54,7 @@ struct PatchExposure {
         func candidates(_ frames: [[Double]]) -> [[Double]] {
             var result = [[Double]](repeating: [], count: times.count)
             for patch in 0..<frames[0].count {
+                if Task.isCancelled { break }
                 let samples = times.indices.map { ExposureSample(time: times[$0], level: frames[$0][patch], segment: 0) }
                 let curve = ExposureMath.curve(samples: samples, radius: radius, strength: 1, mode: mode)
                 for i in times.indices { result[i].append(curve.stops[i]) }
@@ -61,6 +62,7 @@ struct PatchExposure {
             return result
         }
         let primary = candidates(values), validation = candidates(validationValues)
+        if Task.isCancelled { return [] }
         return times.indices.map { i in
             let changes = primary[i], checks = validation[i]
             let median = ExposureMath.median(changes), detail = ExposureMath.median(checks)

@@ -81,6 +81,7 @@ enum ExposureMath {
         // A trimmed time-window mean retains slow trends while keeping a
         // single bad frame from pulling neighbouring targets towards itself.
         for index in samples.indices {
+            if Task.isCancelled { break }
             let sample = samples[index]
             while right < samples.count && samples[right].segment <= sample.segment && samples[right].time <= sample.time + radius + 0.000001 {
                 right += 1
