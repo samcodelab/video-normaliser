@@ -194,11 +194,12 @@ final class AppModel: ObservableObject {
                 try Task.checkCancellation()
                 projectSource = ProjectSource(url: url, fingerprint: fingerprint)
                 sourceStamp = stamp
-                let sameFrames = result?.samples.map(\.time) == analysis.samples.map(\.time)
+                let refreshed = SceneMath.refreshedCuts(previous: result?.samples ?? [], current: analysis.samples,
+                    boundaries: sceneBoundaries, settings: sceneSettings, defaults: defaults)
                 result = analysis
-                if !sameFrames {
-                    sceneBoundaries = SceneMath.boundaries(in: analysis.samples)
-                    sceneSettings = Dictionary(uniqueKeysWithValues: scenes.map { ($0.startFrame, defaults) })
+                sceneBoundaries = refreshed.boundaries
+                sceneSettings = refreshed.settings
+                if !refreshed.sameFrames {
                     referenceResults = [:]
                 }
                 setPlayhead(playhead)
@@ -536,8 +537,10 @@ final class AppModel: ObservableObject {
     }
 
     func cancel() {
-        task?.cancel(); correctionTask?.cancel(); correctionGeneration += 1
-        correctionPending = false
+        task?.cancel()
+        // Cancelling an operation must not make a curve from older settings
+        // exportable. Finish the current settings in the background instead.
+        if correctionPending { updateCurve(markEdited: false) }
     }
 }
 

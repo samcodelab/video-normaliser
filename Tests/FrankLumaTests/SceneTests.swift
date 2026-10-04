@@ -2,6 +2,39 @@ import XCTest
 @testable import FrankLuma
 
 final class SceneTests: XCTestCase {
+    private func subjectFrame(colour: [UInt8], x: Int = 12, gain: Double = 1) -> FrameAppearance {
+        var pixels: [UInt8] = []
+        for row in 0..<32 { for column in 0..<48 {
+            let rgb: [UInt8] = (8..<24).contains(row) && (x..<x+24).contains(column)
+                ? colour : [30, 55, 180]
+            pixels += rgb.map { UInt8(clamping: Int(Double($0) * gain)) } + [255]
+        } }
+        return FrameAppearance(pixels: pixels, width: 48, height: 32)
+    }
+
+    func testPersistentSubjectReplacementCutsDespiteIdenticalBackground() {
+        let old = subjectFrame(colour: [160, 30, 20])
+        let new = subjectFrame(colour: [25, 160, 35])
+        XCTAssertFalse(SceneDetection.isCut(previous: old, current: new), "Whole-frame comparison misses this regional change")
+        XCTAssertTrue(SceneDetection.isCut(preceding: old, previous: old, current: new, following: [new, new, new]))
+    }
+
+    func testRegionalDetectionKeepsMotionExposureAndTransientColourFlashesInShot() {
+        let old = subjectFrame(colour: [160, 30, 20])
+        let moved = subjectFrame(colour: [160, 30, 20], x: 22)
+        let exposed = subjectFrame(colour: [160, 30, 20], gain: 1.25)
+        let flash = subjectFrame(colour: [25, 160, 35])
+        let changingLight = subjectFrame(colour: [160, 65, 20])
+        XCTAssertFalse(SceneDetection.isCut(preceding: old, previous: old, current: moved, following: [moved, moved, moved]))
+        XCTAssertFalse(SceneDetection.isCut(preceding: old, previous: old, current: exposed, following: [exposed, exposed, exposed]))
+        XCTAssertFalse(SceneDetection.isCut(preceding: old, previous: old, current: flash, following: [old, old, old]))
+        XCTAssertFalse(SceneDetection.isCut(preceding: old, previous: old, current: flash, following: [flash, flash, old]),
+                       "A three-frame lighting flash must not become a new shot")
+        XCTAssertFalse(SceneDetection.isCut(preceding: old, previous: flash, current: old, following: [old, old, old]))
+        XCTAssertFalse(SceneDetection.isCut(preceding: changingLight, previous: old, current: flash, following: [flash, flash, flash]),
+                       "Already changing regional colour is not evidence of a settled shot being replaced")
+    }
+
     func testExposureFlashIsNotACut() {
         let light = (0..<100).map { 0.06 + Double($0) * 0.003 }
         let original = FrameAppearance(luminance: light, chromaticity: [0.2, 0.5, 0.3])
@@ -73,6 +106,28 @@ final class SceneTests: XCTestCase {
         XCTAssertEqual(scenes[1].end, 2)
         let merged = SceneMath.assign(split, boundaries: [])
         XCTAssertEqual(ExposureMath.curve(samples: merged, radius: 3, strength: 1, mode: .steady).peak, 0.5)
+    }
+
+    func testReanalysisRefreshesAutomaticCutsButPreservesReviewedCutsAndSettings() {
+        let frames = (0..<8).map { ExposureSample(time: Double($0)/12, level: 0, segment: 0) }
+        let old = SceneMath.assign(frames, boundaries: [4])
+        let newlyDetected = SceneMath.assign(frames, boundaries: [2, 4])
+        let first = SceneSettings(strength: 0.3, mode: .steady)
+        let second = SceneSettings(strength: 0.8)
+        let automatic = SceneMath.refreshedCuts(previous: old, current: newlyDetected, boundaries: [4],
+            settings: [0: first, 4: second], defaults: SceneSettings())
+        XCTAssertEqual(automatic.boundaries, [2, 4])
+        XCTAssertEqual(automatic.settings, [0: first, 2: first, 4: second])
+        let manual = SceneMath.refreshedCuts(previous: old, current: newlyDetected, boundaries: [3],
+            settings: [0: first, 3: second], defaults: SceneSettings())
+        XCTAssertEqual(manual.boundaries, [3])
+        XCTAssertEqual(manual.settings, [0: first, 3: second])
+        let differentFrames = newlyDetected.map { ExposureSample(time: $0.time + 0.01, level: 0, segment: $0.segment) }
+        let changed = SceneMath.refreshedCuts(previous: old, current: differentFrames, boundaries: [3],
+            settings: manual.settings, defaults: SceneSettings())
+        XCTAssertFalse(changed.sameFrames)
+        XCTAssertEqual(changed.boundaries, [2, 4])
+        XCTAssertTrue(changed.settings.values.allSatisfy { $0 == SceneSettings() })
     }
 
     func testColourDescriptorIgnoresUniformExposureChange() {

@@ -113,6 +113,28 @@ final class TimelineTests: XCTestCase {
         XCTAssertTrue(model.curve.stops.isEmpty)
     }
 
+    @MainActor
+    func testCancelDoesNotMakeAnOutdatedCorrectionExportable() async throws {
+        let model = AppModel()
+        let samples = (0..<48).map {
+            ExposureSample(time: Double($0)/12, level: $0.isMultiple(of: 2) ? 0.3 : -0.3, segment: 0)
+        }
+        model.result = AnalysisResult(samples: samples, uncertainFrames: 0, cuts: 0)
+        model.mode = .steady
+        model.strength = 1
+        model.cancel()
+        XCTAssertTrue(model.correctionPending, "Export must remain disabled until current settings are applied")
+        for _ in 0..<100 {
+            if !model.correctionPending { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertFalse(model.correctionPending)
+        XCTAssertEqual(model.curve.stops,
+            SceneCorrection.curve(base: samples, boundaries: [], settings: model.sceneSettings, references: [:]).stops)
+        XCTAssertTrue(model.curve.stops.contains { abs($0) > 0.1 })
+        model.closeSession()
+    }
+
     func testSettingsAffectOnlyTheirOwnScene() {
         let samples = (0..<48).map { ExposureSample(time: Double($0) / 24, level: $0.isMultiple(of: 2) ? 0.3 : -0.3, segment: 0) }
         let normal = SceneSettings(strength: 1, radius: 0.5, mode: .steady)

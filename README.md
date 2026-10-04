@@ -6,7 +6,7 @@ Historical validation sections below retain the old Video Normaliser name and ar
 
 ## Open the app
 
-Open `dist/FrankLuma.app`. You can also copy that app to Applications. The local build supports Apple silicon and Intel, requires macOS 14 or later, and is ad-hoc signed for development. Developer ID and App Store release schemes are available in `FrankLuma.xcodeproj`.
+The signed distribution app is `dist/FrankLuma.app`; it can be copied to Applications. `scripts/build-app.sh` creates a separate ad-hoc development app at `dist/local/FrankLuma.app`, preserving signed releases. Both support Apple silicon and Intel and require macOS 14 or later. Developer ID and App Store release schemes are available in `FrankLuma.xcodeproj`.
 
 1. Open or drop a video into the window, then click **Detect scenes & analyse**.
 2. Click or drag on the exposure graph to scrub. The white playhead, frame number, preview, and selected scene stay in sync. Use **← / →** to step exactly one source frame and **Space** to play or pause. First/last-frame buttons are beside the transport controls.

@@ -128,7 +128,7 @@ enum VideoEngine {
                   let previous = appearances.first(where: { $0.index == index-1 })?.frame,
                   let current = appearances.first(where: { $0.index == index })?.frame else { return }
             let preceding = appearances.first(where: { $0.index == index-2 })?.frame
-            let following = appearances.filter { $0.index > index }.prefix(2).map(\.frame)
+            let following = appearances.filter { $0.index > index }.prefix(3).map(\.frame)
             if SceneDetection.isCut(preceding: preceding, previous: previous, current: current, following: following) {
                 detectedBoundaries.insert(index)
             }
@@ -192,17 +192,18 @@ enum VideoEngine {
                 let spatialThumbnail = SpatialThumbnail(width: 96, height: 56, rgb: rgb)
                 let time = CMSampleBufferGetPresentationTimeStamp(buffer).seconds
                 samples.append(ExposureSample(time: time, level: 0, segment: 0, cells: patches, thumbnail: spatialThumbnail))
-                // Two frames of lookahead distinguish a stable new shot from
-                // continued subject motion. Retain only five tiny descriptors.
+                // Three frames of lookahead distinguish a lasting foreground
+                // replacement from short lighting flashes. Retain six descriptors.
                 appearances.append((samples.count - 1, wholeFrame))
-                if appearances.count > 5 { appearances.removeFirst() }
-                checkBoundary(samples.count - 3)
+                if appearances.count > 6 { appearances.removeFirst() }
+                checkBoundary(samples.count - 4)
                 if samples.count.isMultiple(of: 12) { progress(min(1, time / duration)) }
             }
         }
         try Task.checkCancellation()
         if reader.status == .failed { throw reader.error ?? VideoError.message("Video decoding failed.") }
         guard samples.count > 1 else { throw VideoError.message("At least two video frames are needed for analysis.") }
+        checkBoundary(samples.count - 3)
         checkBoundary(samples.count - 2)
         checkBoundary(samples.count - 1)
         samples = SceneMath.assign(samples, boundaries: detectedBoundaries)

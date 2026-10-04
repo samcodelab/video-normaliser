@@ -5,9 +5,12 @@ import CoreGraphics
 struct FrameAppearance {
     let luminance: [Double]
     let chromaticity: [Double]
+    let rgb: [Double]
+    let columns: Int
 
     init(pixels: [UInt8], width: Int, height: Int) {
         var light: [Double] = []
+        var colours: [Double] = []
         var histogram = [Double](repeating: 0, count: 64)
         var count = 0.0
         for y in stride(from: 0, to: height, by: 2) {
@@ -20,6 +23,7 @@ struct FrameAppearance {
                     b += Double(pixels[i + 2]) / 1020
                 } }
                 light.append(0.2126 * r + 0.7152 * g + 0.0722 * b)
+                colours += [r, g, b]
                 let total = r + g + b
                 if total > 0.045, max(r, g, b) < 0.95 {
                     // Soft histogram bins avoid spurious cuts when compression
@@ -38,11 +42,14 @@ struct FrameAppearance {
         }
         luminance = light
         chromaticity = count > 0 ? histogram.map { $0 / count } : []
+        rgb = colours
+        columns = width / 2
     }
 
     init(luminance: [Double], chromaticity: [Double]) {
         self.luminance = luminance
         self.chromaticity = chromaticity
+        rgb = []; columns = 0
     }
 }
 
@@ -58,6 +65,7 @@ enum SceneDetection {
     /// stop-motion frames. During that motion, require a change in the colour
     /// population as well as structure before declaring another automatic cut.
     static func isCut(preceding: FrameAppearance?, previous: FrameAppearance, current: FrameAppearance, following: [FrameAppearance] = []) -> Bool {
+        if isForegroundCut(preceding: preceding, previous: previous, current: current, following: following) { return true }
         guard isCut(previous: previous, current: current) else { return false }
         guard let preceding else { return true }
         let changes = zip(preceding.luminance, previous.luminance).filter {
@@ -67,11 +75,11 @@ enum SceneDetection {
         let ongoingMotion = ExposureMath.median(changes.map { abs($0 - exposure) }) > 0.28
         guard ongoingMotion else { return true }
         let colourChange = zip(previous.chromaticity, current.chromaticity).map { abs($0 - $1) }.reduce(0, +) / 2
-        guard colourChange <= 0.45, following.count == 2 else { return true }
+        guard colourChange <= 0.45, following.count >= 2 else { return true }
         // Preserve a new shot that settles after its first moving frame.
         // Suppress only candidates surrounded by sustained structural motion.
         var previousFrame = current
-        for next in following {
+        for next in following.prefix(2) {
             let changes = zip(previousFrame.luminance, next.luminance).filter {
                 $0 > 0.015 && $1 > 0.015 && $0 < 0.92 && $1 < 0.92
             }.map { log2($1 / $0) }
@@ -80,6 +88,62 @@ enum SceneDetection {
             previousFrame = next
         }
         return false
+    }
+
+    /// A new subject or camera angle can occupy less than half the frame,
+    /// leaving the background (and the median structure score) unchanged.
+    /// Require a strong regional palette replacement, a settled prior shot,
+    /// and three following frames of the new palette. Translation preserves the palette;
+    /// a brief flash returns to the old palette instead of confirming a cut.
+    private static func isForegroundCut(preceding: FrameAppearance?, previous: FrameAppearance,
+                                        current: FrameAppearance, following: [FrameAppearance]) -> Bool {
+        guard previous.columns >= 6, current.columns == previous.columns,
+              previous.rgb.count == previous.luminance.count * 3,
+              current.rgb.count == previous.rgb.count, following.count >= 3,
+              following.allSatisfy({ $0.columns == previous.columns && $0.rgb.count == previous.rgb.count }),
+              colourDistance(previous.chromaticity, current.chromaticity) > 0.15 else { return false }
+        let columns = previous.columns, rows = previous.luminance.count / columns
+        guard rows >= 6 else { return false }
+        for y in 0..<3 { for x in 0..<3 {
+            let indices = (y * rows / 3..<(y + 1) * rows / 3).flatMap { row in
+                (x * columns / 3..<(x + 1) * columns / 3).map { row * columns + $0 }
+            }
+            let before = regionalColour(previous, indices: indices)
+            let after = regionalColour(current, indices: indices)
+            guard colourDistance(before, after) > 0.65 else { continue }
+            if let preceding {
+                guard preceding.rgb.count == previous.rgb.count,
+                      colourDistance(regionalColour(preceding, indices: indices), before) < 0.08 else { continue }
+            }
+            if following.prefix(3).allSatisfy({ colourDistance(regionalColour($0, indices: indices), after) < 0.20 }) {
+                return true
+            }
+        } }
+        return false
+    }
+
+    private static func colourDistance(_ first: [Double], _ second: [Double]) -> Double {
+        guard !first.isEmpty, first.count == second.count else { return 0 }
+        return zip(first, second).map { abs($0 - $1) }.reduce(0, +) / 2
+    }
+
+    private static func regionalColour(_ frame: FrameAppearance, indices: [Int]) -> [Double] {
+        var histogram = [Double](repeating: 0, count: 64)
+        var count = 0
+        for index in indices {
+            let r = frame.rgb[index * 3], g = frame.rgb[index * 3 + 1], b = frame.rgb[index * 3 + 2]
+            let total = r + g + b
+            guard total > 0.045, max(r, g, b) < 0.95 else { continue }
+            let red = r / total * 7, green = g / total * 7
+            let rx = Int(red), gy = Int(green)
+            for (dx, wx) in [(0, 1 - red + Double(rx)), (1, red - Double(rx))] {
+                for (dy, wy) in [(0, 1 - green + Double(gy)), (1, green - Double(gy))] {
+                    histogram[min(7, gy + dy) * 8 + min(7, rx + dx)] += wx * wy
+                }
+            }
+            count += 1
+        }
+        return count >= 12 ? histogram.map { $0 / Double(count) } : []
     }
 
     static func isCut(previous: FrameAppearance, current: FrameAppearance) -> Bool {
@@ -111,6 +175,22 @@ struct VideoScene: Identifiable {
 }
 
 enum SceneMath {
+    /// Refresh automatic cuts on reanalysis, preserving explicitly reviewed
+    /// boundaries and inheriting each new shot's existing editing settings.
+    static func refreshedCuts(previous: [ExposureSample], current: [ExposureSample], boundaries: Set<Int>,
+                              settings: [Int: SceneSettings], defaults: SceneSettings)
+        -> (boundaries: Set<Int>, settings: [Int: SceneSettings], sameFrames: Bool) {
+        let sameFrames = previous.map(\.time) == current.map(\.time)
+        if sameFrames, boundaries != self.boundaries(in: previous) { return (boundaries, settings, true) }
+        let detected = self.boundaries(in: current)
+        let oldStarts = [0] + boundaries.sorted()
+        let updated = Dictionary(uniqueKeysWithValues: ([0] + detected.sorted()).map { start in
+            let oldStart = oldStarts.last { $0 <= start } ?? 0
+            return (start, sameFrames ? settings[oldStart] ?? defaults : defaults)
+        })
+        return (detected, updated, sameFrames)
+    }
+
     static func boundaries(in samples: [ExposureSample]) -> Set<Int> {
         Set(samples.indices.dropFirst().filter { samples[$0].segment != samples[$0 - 1].segment })
     }

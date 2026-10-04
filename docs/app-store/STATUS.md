@@ -1,56 +1,51 @@
-# Submission status — 1.0.0 (3)
+# Submission status — 1.0.0 (6)
 
-## Prepared and verified
+## Current result — 5 October 2026
 
-- Privacy-policy links inside the app.
-- Privacy manifest: no tracking/collection; file timestamp reasons for selected files and app-container recovery metadata.
-- Universal sandboxed archive and App Store-signed package; provisioning resolved.
-- All 63 hosted tests pass, including actual export choices and the bundled demo.
-- Native force-quit recovery: startup sheet appears and restores unsaved settings.
-- English listing, review guidance, privacy/compliance guidance and A$19.99 Australian one-time launch price in LISTING.md.
-- Four 2560×1600 screenshots in screenshots/.
+The reviewed source passes all 77 hosted tests. The final universal App Store archive builds successfully, but export is blocked by Xcode reporting **No Accounts** and **No signing certificate “Mac Installer Distribution” found** for team `PLQG3PMFP8`. The final build 6 export attempt gives the same result. No build 6 Store package, upload or review submission exists. The old build 3 package must not be uploaded for this source.
 
-Package: `.release/app-store-build-3-final/export/FrankLuma.pkg` (ignored build artifact, on this Mac). No upload, TestFlight distribution or review submission has occurred.
+Archive: `.release/app-store-20261005-101753/FrankLuma.xcarchive`. The archived app has bundle ID `com.sam.frankluma`, version 1.0.0 (6), macOS 14 minimum, both architectures, sandbox/bookmark/user-selected-file entitlements, and no debug entitlement. Its signature verifies; the original demo and privacy manifest are present.
 
-## Performance changes after the build 3 archive
+Developer ID build 5 also archives and exports successfully at `.release/developer-id-20261005-011250/export/FrankLuma.app`. Its notarisation attempt cannot find the previously working `TonepebbleNotary` profile in the current Keychain context. The verified notarised build 4 remains at `dist/FrankLuma.app` and `dist/FrankLuma-1.0.0-build-4.dmg`; it predates the cancellation fix. Build 6 is available for local testing at `dist/local/FrankLuma.app`; it is ad-hoc signed, not a notarised release.
 
-The current source includes original-frame regional brightness targets, motion/colour support checks, background/debounced correction, reuse of unchanged scenes and registrations, bounded local frame preparation, parallel correction on long shots, and motion-aware scene-cut confirmation. The hosted suite now passes 71 tests, including independent regional lighting targets and dark textured subject flashes beside motion. Matching texture now protects supported subject lighting changes from false motion rejection; sampled chest flicker remains in the supplied footage. The supplied 4K/12 fps clip was analysed, exported and reanalysed with all 212 frames and its original dimensions/duration preserved. An optimized local app is in `.build/performance-release/Build/Products/Release/FrankLuma.app`.
+## Issues addressed
 
-The existing Store package predates these changes. Create and validate a new numbered archive/export before uploading; do not use the old build 3 package as evidence for the updated source. Correction stress tests cover a 20-minute analysis workload, not decoding/exporting a real 20-minute 4K source. See the performance verification notes in `docs/RELEASING.md`.
+- Cancelling during correction could clear the pending flag while retaining a curve from older settings, allowing stale output to be exported. Cancel now retains/recalculates the current correction in the background; export stays disabled until it is current. A native model regression covers this.
+- Local development builds previously overwrote the signed default app and merged bundles in place. `scripts/build-app.sh` now verifies a fresh staged bundle and publishes only to `dist/local/FrankLuma.app`, preserving distribution artifacts.
+- Added region-based, exposure-normalised palette comparison with a settled prior shot and three-frame confirmation. The supplied 4K clip now automatically splits the group/single-figure transition at zero-based frame 193 (displayed frame 194), plus three other genuine camera changes. No new cuts were added during continuous Hulk movement.
+- Reanalysis now refreshes untouched automatic cuts, inherits scene settings, and preserves manually reviewed boundaries.
+- Release/listing documentation now identifies build 6 rather than implying the old Store package contains the accepted algorithm.
 
-## Default correction update
+## Ready locally
 
-The user accepted the material-guided patch correction after reviewing the corrected movie on 5 October 2026. It is now the default on main for version 1.0.0 build 4. All 73 hosted tests pass, including rendered-pixel regressions. The build 4 Developer ID app and DMG are signed, notarised, stapled and verified; the installer is `dist/FrankLuma-1.0.0-build-4.dmg`. See `docs/RELEASING.md` for regional measurements and release evidence. The old build 3 Store package predates this algorithm and requires replacement before App Store submission.
+- Local-only app with no account, network service, advertising, third-party analytics or in-app purchases. A$19.99 Australian one-time launch price is prepared.
+- Privacy-policy links in Help; sandbox access only to selected files, scoped bookmarks and app-container recovery storage. Privacy manifest declares no collection/tracking and the intended file timestamp reasons.
+- Original silent demo lets App Review analyse, preview and export without supplying private footage.
+- Editable projects, save/discard protection, staged exports, recovery, native codec/timing/audio tests and rendered-pixel regressions.
+- English listing/review instructions in LISTING.md; four genuine 2560×1600 screenshots in screenshots/. Product controls/features shown remain present.
+- Live privacy and support URLs rechecked: HTTPS HTTP 200 on 5 October. Policy describes local storage, retention, recovery and voluntary support emails. Website source/deployment unchanged.
 
-## Live website verified — 4 October 2026
+Use https://broadframestudio.com/frankluma/privacy/ and https://broadframestudio.com/frankluma/help/ in App Store Connect. Support is support@broadframestudio.com; mailbox delivery has not been tested.
 
-Both pages now return HTTP 200 over HTTPS. The index.html URLs redirect with HTTP 308 to the canonical trailing-slash URLs. The privacy policy matches local processing, project/bookmark metadata and recovery storage; both pages provide support@broadframestudio.com. Use these canonical URLs in App Store Connect:
+## Account steps that currently block submission
 
-- Privacy: https://broadframestudio.com/frankluma/privacy/
-- Support: https://broadframestudio.com/frankluma/help/
+1. Sign into the developer account in Xcode → Settings → Accounts, select team `PLQG3PMFP8`, and resolve the Store installer signing certificate/cloud signing. Re-export the existing build 5 archive; no new archive is needed solely to restore credentials.
+2. Confirm/create the macOS FrankLuma record for `com.sam.frankluma`. Enter required review contact name, email and phone.
+3. Confirm applicable paid-app agreements, tax/banking and regional trader disclosures. The account holder must accept binding agreements.
+4. Enter version 1.0.0, Video category, A$19.99 Australian price, intended regions, LISTING.md copy, live URLs and screenshots.
+5. Complete current App Privacy, age-rating and encryption/export-compliance questionnaires against the shipped app. Prepared guidance is not a completed questionnaire.
+6. Upload the current Store package with Organizer/Transporter, inspect Apple's processing/privacy validation and select the build for review. No Apple server validation has been performed here.
 
-No website source edits or deployment were made during this verification. The in-app privacy link uses index.html and works through the redirect. All 26 linked pages/assets checked with curl returned HTTP 200. Mailbox delivery was not tested.
+TestFlight is optional. Developer ID notarisation is for direct distribution and does not replace Store signing or block an otherwise valid Store submission.
 
-## App Store Connect handoff
+## Validation and remaining risks
 
-The account page did not load beyond its header in Safari. In App Store Connect:
+All 77 hosted tests pass, zero failures/skips: `.build/release-tests/Logs/Test/.build/release-tests/Logs/Test/Test-FrankLuma-2026.10.05_10-17-51-+1100.xcresult`. Four licensed/derived short practice inputs successfully analyse, preview, export and reanalyse, preserving source frames/dimensions/duration. A real ten-minute 640×360/25 fps file completes decoding, correction, export and reanalysis with all 15,000 frames and 600 seconds preserved. Analysis plus correction takes 37.66 seconds on this Mac; export is excluded from that timing. It repeats one clip and does not establish 4K production-footage performance.
 
-1. Confirm/create the macOS FrankLuma app record for `com.sam.frankluma` and team `PLQG3PMFP8`.
-2. Confirm applicable agreements and paid-app tax/banking information, and applicable regional trader disclosures. Account holder must accept any new binding agreement.
-3. Set version 1.0.0, category Video, Australian price A$19.99 and intended countries/regions. Review Apple's generated prices elsewhere.
-4. Enter LISTING.md copy, the verified live URLs, screenshots and required review contact details.
-5. Complete App Privacy, current age-rating and export-compliance questionnaires against the shipped app.
-6. Upload the signed package with Xcode Organizer or Transporter, validate Apple's processing results, and inspect the archive privacy report. A successful local export is not server validation or approval.
-7. Submit when website and final release checks are complete. TestFlight is optional, not an Apple submission requirement; a small beta test remains a useful additional check.
+The final 4K verification detects 14 automatic cuts / 15 scenes and preserves all 212 frames, 3840×2160 dimensions and 17.667-second duration through export/reanalysis. The three-frame local-flash practice clip remains one scene; its 596 frames are preserved. The deliberately extreme whole-frame exposure variant adds false cuts in the near-black credit transition (297, 298, 314); the paper-animation portion retains its original boundary at 293. Automatic cuts are editable; this remains a detection limitation, not a claim of complete correction. See `../../PracticeFootage/README.md` for attributions, severity labels and reproducible audit tools. Practice files are not bundled in the app or screenshots.
 
-## Remaining device and footage checks
+Physical checks still recommended before pressing Submit: macOS 14 Apple silicon, production-signed Finder/project opening across restarts, actual external-volume and disk-full failures, and varied real 4K/10–20-minute footage. Intel device testing is waived; the universal binary retains Intel support. Build 5 was launched as a native process, but this session's UI capture reports `cgWindowNotFound`, so no fresh interactive UI/Finder acceptance check is claimed. HDR remains intentionally unsupported and must not be advertised.
 
-- macOS 14 on Apple silicon: launch, analyse, preview, save/reopen and export all five formats. Intel device validation is waived at the user’s request; the current universal binary still contains Intel support.
-- Finder project opening and project drag-and-drop in the production-signed app.
-- External/removable volumes and real disk-full/permission failures.
-- Hour-long/high-frame-rate footage, real HDR/iPhone rejection, multichannel downmix and visual checks on varied production footage.
-- Recommended additional check: final Store build on a second Apple-silicon Mac, including crash recovery and source bookmarks across restarts. TestFlight can distribute it but is optional.
+This local review found no demonstrated sandbox/privacy/third-party-content policy violation. It does not predict or guarantee Apple's approval.
 
-The automated suite includes native codec/timing/audio conversion and a one-minute video, but does not establish completion of the physical-device checks above. HDR remains intentionally unsupported.
-
-[TestFlight is optional — Apple](https://developer.apple.com/help/glossary/testflight-beta-testing/)
+[App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/) · [Common review issues](https://developer.apple.com/app-store/review/) · [Signing identities](https://developer.apple.com/documentation/xcode/sharing-your-teams-signing-certificates)

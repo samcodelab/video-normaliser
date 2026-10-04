@@ -6,7 +6,7 @@ FrankLuma is a native macOS 14+ app with a checked-in Xcode project. Open `Frank
 
 - App and executable: `FrankLuma`
 - Bundle ID: `com.sam.frankluma`
-- Version / build: `1.0.0` / `3`, in `Configuration/Base.xcconfig`
+- Version / build: `1.0.0` / `6`, in `Configuration/Base.xcconfig`
 - Team: `PLQG3PMFP8`, matching the existing TonePebble project and installed signing identities
 - Deployment target: macOS 14.0
 - Release architectures: Apple silicon and Intel (`arm64`, `x86_64`)
@@ -16,16 +16,16 @@ The bundle identifier has a valid Mac App Store provisioning profile, confirmed 
 
 ## Local build and tests
 
-The current release candidate is **1.0.0 (build 4)**. The marketing version is the public release version; increment the build number for each new App Store Connect upload. Use 1.0.1 for a subsequent bug-fix release and 1.1.0 for a subsequent feature release. Both fields feed the app's Info.plist and standard About panel from `Configuration/Base.xcconfig`.
+The current release candidate is **1.0.0 (build 6)**. The marketing version is the public release version; increment the build number for each new App Store Connect upload. Use 1.0.1 for a subsequent bug-fix release and 1.1.0 for a subsequent feature release. Both fields feed the app's Info.plist and standard About panel from `Configuration/Base.xcconfig`.
 
 ```sh
 zsh scripts/build-app.sh
-open dist/FrankLuma.app
+open dist/local/FrankLuma.app
 xcodebuild -project FrankLuma.xcodeproj -scheme FrankLuma \
   -destination 'platform=macOS' test
 ```
 
-The build script deliberately uses ad-hoc signing and writes `dist/FrankLuma.app`. It enables the same App Sandbox and Hardened Runtime as the release app, but it is **not** a Developer ID/notarised distribution build. Use a normal Terminal session: restricted agent shells can block Xcode macros, asset-catalog services and native media rendering.
+The build script deliberately uses ad-hoc signing and writes `dist/local/FrankLuma.app`, preserving the signed distribution app. It enables the same App Sandbox and Hardened Runtime as the release app, but it is **not** a Developer ID/notarised distribution build. Use a normal Terminal session: restricted agent shells can block Xcode macros, asset-catalog services and native media rendering.
 
 The test target is hosted by the app and includes the actual fixture resources. It covers lighting, preview timing, native export, rendering and staged file replacement/abandonment. `swift test --disable-sandbox` also uses the renamed FrankLuma module and the same tests.
 
@@ -119,7 +119,7 @@ The demo is original, procedurally generated geometric footage; its generator is
 
 Analysed sessions can be saved as `.frankluma` projects. Opening another video/project, closing the main window or quitting offers Save, Discard or Cancel for unsaved edits. Unsaved edits also have local recovery checkpoints; deliberate discard/closure clears the active checkpoint. Exports are saved videos, not editable projects. While a task is running, close/quit asks the user to wait or cancel from the main window first.
 
-Remaining device/account checks: run the App Store-signed build through TestFlight; exercise actual HDR/iPhone samples, hour-long/high-frame-rate footage, external and removable volumes, real disk-full/permission failures, macOS 14, and Intel hardware. The local automated tests do not replace those checks. The public support email is support@broadframestudio.com and is linked in Help. The support URL is https://broadframestudio.com/frankluma/help/index.html. Both support and privacy URLs are now verified live (HTTP 200 after index.html redirects).
+Remaining device/account checks: optionally beta-test the App Store build with TestFlight; exercise actual HDR/iPhone samples, hour-long/high-frame-rate footage, external and removable volumes, real disk-full/permission failures, macOS 14, and Intel hardware. The local automated tests do not replace those checks. The public support email is support@broadframestudio.com and is linked in Help. The support URL is https://broadframestudio.com/frankluma/help/index.html. Both support and privacy URLs are now verified live (HTTP 200 after index.html redirects).
 
 
 ### Build 2 validation
@@ -249,3 +249,33 @@ The accepted patch-tone algorithm is on main. Version 1.0.0 build 4 archived and
 Apple accepted the build 4 app notarisation using the user-supplied `TonepebbleNotary` profile: submission `9ccf84f0-d3d5-45bf-b221-9a7c63f609d1`, evidence `.release/notarisation-NCyS7t/result.json`. The app ticket is stapled and validated; Gatekeeper accepts the exported app and `dist/FrankLuma.app` as Notarized Developer ID.
 
 The signed DMG was also accepted: submission `92b9e601-2c54-4ef2-851c-96569f0a0517`, evidence `.release/dmg-Kb2Dzo/notarisation.json`. Distribution installer: `dist/FrankLuma-1.0.0-build-4.dmg`, with adjacent SHA-256 checksum. Its ticket, signature, Gatekeeper assessment and disk-image integrity pass. The packaged app was additionally checked from a read-only mounted DMG: signature, ticket and Gatekeeper all pass. This is the current Developer ID release; App Store submission still requires a new Store archive.
+
+
+## Submission review — 5 October 2026, build 5
+
+Reviewed against Apple's current [App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/) and [common review issues](https://developer.apple.com/app-store/review/). The relevant checks are app completeness (2.1), truthful metadata/screenshots (2.3), Mac sandbox/packaging (2.4.5), privacy (5.1.1), and third-party content rights (5.2). No demonstrated policy violation was found in the sandbox, public links, local-only privacy behaviour, original review demo or native tool functionality. Approval remains Apple's decision.
+
+Fixed a real completeness issue: cancelling an operation during a pending correction could mark an older curve ready for export. Cancellation now schedules/retains the current settings calculation in the background and keeps export gated. All 74 hosted tests pass, including the new cancellation regression; no skips/failures. Evidence: `.build/release-tests/Logs/Test/Test-FrankLuma-2026.10.05_01-06-45-+1100.xcresult`. The local build script also stages/verifies a fresh app at `dist/local/FrankLuma.app`, preserving the signed distribution app.
+
+New Store archive: `.release/app-store-20261005-010856/FrankLuma.xcarchive`. Its app identity/version/deployment target, signature, intended sandbox entitlements, bundled demo and privacy manifest validate. Xcode export and a later retry fail with **No Accounts** and a missing **Mac Installer Distribution** certificate for team PLQG3PMFP8. Restore the Xcode account/signing before re-exporting; never upload the older build 3 package for these changes. Account record, price, agreements, questionnaires, review contact, upload and Apple's server validation remain outstanding. See `docs/app-store/STATUS.md` for the concrete handoff.
+
+Developer ID build 5 exports at `.release/developer-id-20261005-011250/export/FrankLuma.app`; notarisation currently cannot find the previously working TonepebbleNotary profile. Build 4 remains the signed/notarised distribution in dist. Build 5 was launched, but native capture could not locate its window; no new interactive acceptance check is asserted.
+
+Both canonical privacy/support URLs return HTTPS HTTP 200. Published retention/deletion text matches selected-file projects, local staging and recovery behaviour. No website edits/deployment occurred. Prepared screenshots use original geometric footage; practice media stays outside the app. The English listing limits claims to reducing SDR exposure flicker and accurately describes formats, motion/highlight limits, no accounts and local processing.
+
+### Practice and long-video verification
+
+Downloaded two CC BY 3.0 stop-motion clips into `PracticeFootage/`, with sources/attributions in `PracticeFootage/README.md`. Added clearly labelled synthetic whole-frame pulses and local contrast/exposure flashes without changing originals. The native audit verifies all four short sources through analysis, corrected preview, export and reanalysis. It also verifies a 600-second repeated-source 640×360/25 fps movie with exactly 15,000 frames through the complete decode/correct/export/reanalyse pipeline. Analysis plus correction is 37.66 seconds on this Mac. This includes decoding but excludes exporting; it does not demonstrate 4K long-video throughput. The corrected output is `.build/practice/10min/corrected.mp4`.
+
+Extreme added flicker exposes extra auto-cuts in near-black credit fades (297, 298, 314), while the source has boundaries 293 and 396. This is recorded as a detection limitation with manual boundary refinement, not hidden by a global flicker score. Native audit source and generators are in `scripts/validation/`; build with `scripts/build-practice-audit.sh`. Research datasets are linked for further evaluation, with media licensing/access still to confirm. No research model, private video, licensed media or generated test movie is committed or bundled.
+
+
+### Same-background scene detection and final build 6
+
+The group-to-single-figure transition at zero-based frame 193 (displayed frame 194) was missed because most background pixels did not change. Whole-frame median structure and colour population diluted the subject replacement. Added a coarse 3×3 regional palette comparison using exposure-normalised RGB, sufficient usable colour samples, a settled preceding region and three following frames confirming the new palette. Only six tiny appearance descriptors are retained; whole-frame detection and its ongoing-motion suppression remain. Brief regional colour/exposure flashes and translation are covered by regressions. This is conservative subject/camera-change detection, not semantic object recognition or detection of every edit.
+
+Native 4K verification now finds boundaries `[10, 21, 45, 66, 75, 85, 107, 129, 143, 154, 157, 174, 180, 193]`: all original accepted cuts plus four independently inspected camera/subject changes, including the requested cut. No additional cuts appear during continuous Hulk motion. The corrected export preserves all 212 frames, 3840×2160 and 17.667 seconds; evidence `.build/practice/lego-finalcuts.log`. The three-frame local-flash practice clip returns to zero cuts and retains all 596 frames through export/reanalysis; evidence `.build/practice/local-finalcuts.log`. Near-black credit fades in the deliberately extreme whole-frame flicker variant remain a known editable-boundary limitation.
+
+Reanalysis previously preserved every old cut even when it was untouched automatic output. It now refreshes automatic boundaries and inherits each resulting shot's existing settings. A manually altered boundary set remains authoritative. In the new app, Analyse again updates untouched automatic cuts; use Reset cuts after reanalysis to explicitly replace a manually reviewed set. Project opening still restores saved cuts.
+
+Final Store archive: `.release/app-store-20261005-101753/FrankLuma.xcarchive`, version 1.0.0 build 6. Archive succeeds; export still fails with No Accounts and missing Mac Installer Distribution signing. No build 6 package/upload is claimed. The testable optimized app is `dist/local/FrankLuma.app`; local builds preserve the notarised build 4 distribution. All 77 hosted tests pass with zero failures/skips. Final test evidence: `.build/release-tests/Logs/Test/Test-FrankLuma-2026.10.05_10-17-51-+1100.xcresult`.
