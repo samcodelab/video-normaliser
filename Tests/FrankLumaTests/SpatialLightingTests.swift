@@ -107,6 +107,44 @@ final class SpatialLightingTests: XCTestCase {
         let fields=SpatialLighting.estimate(samples:samples,global:[0,0,0,0.4,0,0,0],radius:0.5,strength:1)
         XCTAssertLessThan(fields.map(\.peak).max()!,0.005)
     }
+
+    func testTexturedDarkSubjectReceivesItsOwnFlashCorrectionBesideMotion() {
+        let w = 96, h = 56
+        let frames = (0..<11).map { frame -> SpatialThumbnail in
+            var rgb: [Float] = []
+            for y in 0..<h { for x in 0..<w {
+                let texture = 0.7 + 0.3*sin(Double(x)*0.8)*cos(Double(y)*0.9)
+                let backgroundEV = frame == 4 ? -0.3 : frame == 5 ? 0.15 : 0
+                if x >= 32, x < 64, y >= 10, y < 46 {
+                    // Dark printed recesses reduce the usable pixel count.
+                    // The flash changes contrast as well as average exposure.
+                    let ink = (x+y) % 3 == 0 ? 0.12 : 1.0
+                    let gain = frame == 4 ? 0.65 : frame == 5 ? 1.65 : 1.0
+                    rgb += [0.32, 0.055, 0.025].map { Float($0*texture*ink*gain) }
+                } else if x >= frame*2, x < frame*2+8, y >= 20, y < 38 {
+                    rgb += [0.1, 0.35, 0.05].map { Float($0*pow(2,backgroundEV)) }
+                } else {
+                    rgb += [0.025, 0.12, 0.4].map { Float($0*texture*pow(2,backgroundEV)) }
+                }
+            } }
+            return SpatialThumbnail(width: w, height: h, rgb: rgb)
+        }
+        let samples = frames.enumerated().map {
+            ExposureSample(time: Double($0.offset)/12, level: 0, segment: 0, thumbnail: $0.element)
+        }
+        let global = (0..<11).map { $0 == 4 ? 0.3 : $0 == 5 ? -0.15 : 0.0 }
+        for mode in NormalisationMode.allCases {
+            let fields = SpatialLighting.estimate(samples: samples, global: global, radius: 0.5, strength: 1, mode: mode)
+            for frame in 4...5 {
+                XCTAssertNil(fields[frame].fallback)
+                let residual = SpatialField.basis(x: 0.5, y: 0.5, columns: 9, rows: 6).reduce(0) {
+                    $0 + fields[frame].exposureStops[$1.0]*$1.1
+                }
+                let error = log2(frame == 4 ? 0.65 : 1.65)+global[frame]+residual
+                XCTAssertLessThan(abs(error), 0.10, "A subject flash must not be discarded as motion or a spatial outlier")
+            }
+        }
+    }
     func testSpatialFlashStabilisesUpperAndLowerBackgroundWithoutTemporalBleed() {
         let frames=(0..<7).map { i in thumbnail(exposure: { _,y in i == 3 ? -0.5*y : 0 }) }
         let samples=frames.enumerated().map { ExposureSample(time:Double($0.offset)/12,level:0,segment:0,thumbnail:$0.element) }

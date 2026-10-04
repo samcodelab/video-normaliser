@@ -128,8 +128,18 @@ enum SpatialLighting {
             if Task.isCancelled { return [] }
             let red = ExposureMath.median(reds.map { $0[patch] })
             let green = ExposureMath.median(greens.map { $0[patch] })
-            let valid = samples.indices.filter {
-                abs(reds[$0][patch]-red)+abs(greens[$0][patch]-green) < 0.04 && means[$0][patch] > 0.015
+            let anchor = samples.indices.min {
+                abs(reds[$0][patch]-red)+abs(greens[$0][patch]-green) < abs(reds[$1][patch]-red)+abs(greens[$1][patch]-green)
+            }!
+            let x = min(w-3, max(2, Int((Double(patch % 24)+0.5)/24*Double(w))))
+            let y = min(h-3, max(2, Int((Double(patch / 24)+0.5)/14*Double(h))))
+            let valid = samples.indices.filter { i in
+                let colour = abs(reds[i][patch]-red)+abs(greens[i][patch]-green)
+                guard means[i][patch] > 0.015 else { return false }
+                if colour < 0.04 { return true }
+                // Additive illumination changes chromaticity even when the
+                // physical surface is unchanged. Require matching texture.
+                return colour < 0.12 && textureCorrelation(samples[i].thumbnail!, samples[anchor].thumbnail!, x: x, y: y) > 0.97
             }
             for i in samples.indices { targets[i][patch] = .nan }
             guard valid.count >= 3 else { continue }
@@ -284,8 +294,9 @@ enum SpatialLighting {
                 field.reference[index] = desired
 
             } }
-            // Remove samples adjacent to strong motion/occlusion. Never create
-            // a subject-shaped correction edge: the fitted field stays coarse.
+            // Erode uncertain boundary patches beside motion/occlusion. A patch
+            // with consistent correspondence must keep its own lighting target;
+            // a moving neighbour does not invalidate that physical surface.
             let motion = field.motion
             for row in 0..<field.sampleRows { for col in 0..<field.sampleColumns {
                 let index = row * field.sampleColumns + col
@@ -296,7 +307,7 @@ enum SpatialLighting {
                         if motion[yy*field.sampleColumns+xx] > 0.65 { movingNeighbours += 1 }
                     }
                 }
-                if movingNeighbours > 0 { field.confidence[index] *= 0.4 }
+                if movingNeighbours > 0, motion[index] > 0.25 { field.confidence[index] *= 0.4 }
             } }
             guard field.confidence.filter({ $0 > 0.25 }).count >= 18 else {
                 field.fallback = "Insufficient unoccluded background support"
@@ -400,6 +411,26 @@ enum SpatialLighting {
         return (best.dx,best.dy,best.error,best.error < (best.dx == 0 && best.dy == 0 ? 0.20 : 0.12) && abs(best.dx)<12 && abs(best.dy)<8)
     }
 
+    /// Exposure/offset invariant patch structure. Flat patches cannot prove
+    /// correspondence; colour checks continue to protect those regions.
+    private static func textureCorrelation(_ a: SpatialThumbnail, _ b: SpatialThumbnail, x: Int, y: Int) -> Double {
+        let w = a.width
+        var aa: [Double] = [], bb: [Double] = []
+        for yy in -2...2 { for xx in -2...2 {
+            let p = ((y+yy)*w+x+xx)*3
+            aa.append(0.2126*Double(a.rgb[p])+0.7152*Double(a.rgb[p+1])+0.0722*Double(a.rgb[p+2]))
+            bb.append(0.2126*Double(b.rgb[p])+0.7152*Double(b.rgb[p+1])+0.0722*Double(b.rgb[p+2]))
+        } }
+        let ma = aa.reduce(0,+)/25, mb = bb.reduce(0,+)/25
+        var va = 0.0, vb = 0.0, covariance = 0.0
+        for i in aa.indices {
+            let da = aa[i]-ma, db = bb[i]-mb
+            va += da*da; vb += db*db; covariance += da*db
+        }
+        guard va/25 > 0.00002, vb/25 > 0.00002 else { return 0 }
+        return covariance/sqrt(va*vb)
+    }
+
     private static func compare(_ a: Frame, _ b: Frame, x: Int, y: Int, dx: Int, dy: Int) -> (delta: Double, offset: Double, confidence: Double) {
         let w=a.thumb.width,h=a.thumb.height
         guard x+dx>=2, x+dx<w-2, y+dy>=2, y+dy<h-2 else { return (0,0,0) }
@@ -414,11 +445,19 @@ enum SpatialLighting {
             pairs.append((a.luminance[p], b.luminance[q]))
             colours.append(abs(a.red[p]-b.red[q])+abs(a.green[p]-b.green[q]))
         } }
-        guard ratios.count>=18 else { return (0,0,0) }
+        guard ratios.count>=12 else { return (0,0,0) }
         let delta=ExposureMath.median(ratios)
         let residual=ExposureMath.median(ratios.map { abs($0-delta) })
         let colour=ExposureMath.median(colours)
-        guard colour<0.055 else { return (delta,0,0) }
+        let meanA = pairs.map { $0.0 }.reduce(0,+)/Double(pairs.count)
+        let meanB = pairs.map { $0.1 }.reduce(0,+)/Double(pairs.count)
+        let varianceA = pairs.map { pow($0.0-meanA,2) }.reduce(0,+)
+        let varianceB = pairs.map { pow($0.1-meanB,2) }.reduce(0,+)
+        let covarianceAB = pairs.map { ($0.0-meanA)*($0.1-meanB) }.reduce(0,+)
+        let correlation = varianceA > 0.0005 && varianceB > 0.0005 ? covarianceAB/sqrt(varianceA*varianceB) : 0
+        let sameTexture = correlation > 0.97 && colour < 0.12
+        guard ratios.count >= 18 || sameTexture else { return (delta,0,0) }
+        guard colour < 0.055 || sameTexture else { return (delta,0,0) }
         // Estimate the gain from matched linear-light energy, rather than
         // the median pixel ratio. The latter overweights dark crevices on
         // textured surfaces and can turn a dark floor frame into a bright one.
@@ -429,7 +468,7 @@ enum SpatialLighting {
             let weight = min(1, max(0.08, 3*residual) / max(0.000001, abs(ratios[index]-delta)))
             source += weight * pair.0; target += weight * pair.1; support += weight
         }
-        guard support >= 18, source > 0 else { return (delta, 0, 0) }
+        guard support >= (sameTexture ? 12 : 18), source > 0 else { return (delta, 0, 0) }
         let scalar = target/source
         var gain = scalar, offset = 0.0
         // A diffuse-light change can affect bright studs and dark recesses
@@ -438,20 +477,22 @@ enum SpatialLighting {
         let meanX = pairs.map { $0.0 }.reduce(0,+)/Double(pairs.count)
         let meanY = pairs.map { $0.1 }.reduce(0,+)/Double(pairs.count)
         let variance = pairs.map { pow($0.0-meanX,2) }.reduce(0,+)
-        if variance/Double(pairs.count) > 0.0004 {
+        if variance/Double(pairs.count) > (sameTexture ? 0.00002 : 0.0004) {
             let covariance = pairs.map { ($0.0-meanX)*($0.1-meanY) }.reduce(0,+)
             let slope = covariance/variance
             let intercept = meanY-slope*meanX
             let scalarError = pairs.map { pow($0.1-scalar*$0.0,2) }.reduce(0,+)
             let affineError = pairs.map { pow($0.1-slope*$0.0-intercept,2) }.reduce(0,+)
-            if slope > 0.5, slope < 2, abs(intercept) < 0.25,
+            if slope > (sameTexture ? 0.25 : 0.5), slope < (sameTexture ? 4 : 2), abs(intercept) < 0.25,
                affineError < scalarError * 0.4 {
                 gain = slope; offset = intercept
             }
         }
         let fitResidual = ExposureMath.median(pairs.map { abs($0.1 - (gain*$0.0+offset)) / max(0.02,$0.1) })
-        guard fitResidual < 0.07 else { return (delta,0,0) }
-        return (log2(gain),offset,max(0,1-fitResidual/0.09)*max(0,1-colour/0.065))
+        guard fitResidual < 0.07 || (sameTexture && fitResidual < 0.15) else { return (delta,0,0) }
+        let ordinary = max(0,1-fitResidual/0.09)*max(0,1-colour/0.065)
+        let structural = sameTexture ? 0.8*max(0,1-fitResidual/0.2) : 0
+        return (log2(gain),offset,max(ordinary,structural))
     }
 
     /// Fit gain and offset together: every background patch constrains its
@@ -497,7 +538,9 @@ enum SpatialLighting {
     }
 
     /// Robust weighted least squares with a bending penalty and a weak zero
-    /// prior. Unsupported cells relax towards global correction.
+    /// prior. Preserve supported regional flashes instead of treating their
+    /// concentrated residuals as outliers. Unsupported cells relax towards
+    /// global correction.
     private static func fit(field: SpatialField) -> [Double] {
         let n=field.columns*field.rows
         var solution=[Double](repeating:0,count:n)
@@ -515,14 +558,14 @@ enum SpatialLighting {
                 let basis = sampleBasis[p]
                 let prediction=basis.reduce(0) { $0+solution[$1.0]*$1.1 }
                 let error=abs(prediction-field.requested[p])
-                let robust=iteration==0 ? 1 : min(1,0.08/max(0.0001,error))
+                let robust=iteration==0 ? 1 : min(1,0.20/max(0.0001,error))
                 add(basis,field.confidence[p]*robust,field.requested[p])
             } }
             for y in 0..<field.rows { for x in 0..<field.columns {
                 let p=y*field.columns+x
-                add([(p,1)],0.015,0)
-                if x>0 && x<field.columns-1 { add([(p-1,1),(p,-2),(p+1,1)],0.4,0) }
-                if y>0 && y<field.rows-1 { add([(p-field.columns,1),(p,-2),(p+field.columns,1)],0.4,0) }
+                add([(p,1)],0.002,0)
+                if x>0 && x<field.columns-1 { add([(p-1,1),(p,-2),(p+1,1)],0.08,0) }
+                if y>0 && y<field.rows-1 { add([(p-field.columns,1),(p,-2),(p+field.columns,1)],0.08,0) }
             } }
             // Cholesky solve; positive priors make the system definite.
             var lower=[Double](repeating:0,count:n*n)
