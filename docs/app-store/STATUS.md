@@ -20,7 +20,7 @@ The existing Store package predates these changes. Create and validate a new num
 
 ## Default correction update
 
-The user accepted the material-guided patch correction after reviewing the corrected movie on 5 October 2026. It is now the default on main for version 1.0.0 build 4. All 73 hosted tests pass, including rendered-pixel regressions. See `docs/RELEASING.md` for regional measurements and release evidence. The old build 3 Store package predates this algorithm and requires replacement before App Store submission.
+The user accepted the material-guided patch correction after reviewing the corrected movie on 5 October 2026. It is now the default on main for version 1.0.0 build 4. All 73 hosted tests pass, including rendered-pixel regressions. The build 4 Developer ID app and DMG are signed, notarised, stapled and verified; the installer is `dist/FrankLuma-1.0.0-build-4.dmg`. See `docs/RELEASING.md` for regional measurements and release evidence. The old build 3 Store package predates this algorithm and requires replacement before App Store submission.
 
 ## Live website verified — 4 October 2026
 
