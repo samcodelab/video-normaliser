@@ -55,6 +55,16 @@ final class AppModel: ObservableObject {
     @Published var exportedURL: URL?
     @Published var playhead = 0.0
     @Published var isPlaying = false
+    @Published var loopSelectedScene = false {
+        didSet {
+            let resume = playbackRequested
+            pausePlayback()
+            if resume { togglePlayback() }
+        }
+    }
+    private var playbackRequested = false
+    private var playbackGeneration = 0
+    private var playbackScene: VideoScene?
     @Published var stillImage: CGImage?
     @Published var previewError: String?
     private var task: Task<Void, Never>?
@@ -107,15 +117,18 @@ final class AppModel: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 let wasPlaying = self.isPlaying
-                self.isPlaying = playing
-                if !playing && wasPlaying { self.setPlayhead(self.player.currentTime().seconds); self.refreshStill() }
+                self.isPlaying = self.playbackRequested && (playing || self.playbackScene != nil)
+                if !self.isPlaying && wasPlaying { self.setPlayhead(self.player.currentTime().seconds); self.refreshStill() }
             }
         }
         endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: nil, queue: .main) { [weak self] notification in
             Task { @MainActor in
-                guard let self, let item = notification.object as? AVPlayerItem, item === self.player.currentItem else { return }
-                self.isPlaying = false
-                self.seekFrame((self.result?.samples.count ?? 1) - 1)
+                guard let self, self.playbackRequested, let item = notification.object as? AVPlayerItem, item === self.player.currentItem else { return }
+                if self.playbackRequested, self.loopSelectedScene, let scene = self.playbackScene, !self.busy {
+                    self.restartPlayback(at: scene.start)
+                } else {
+                    self.seekFrame((self.result?.samples.count ?? 1) - 1)
+                }
             }
         }
     }
@@ -152,7 +165,7 @@ final class AppModel: ObservableObject {
         let access = SecurityScopedAccess(newURL)
         activity = "Opening video"
         progress = 0
-        player.pause()
+        pausePlayback()
         stillTask?.cancel()
         task = Task { [sourceAccess] in
             defer { withExtendedLifetime(sourceAccess) {} }
@@ -176,7 +189,7 @@ final class AppModel: ObservableObject {
 
     func analyse() {
         guard let url, !busy else { return }
-        player.pause(); selectingRegion = false
+        pausePlayback(); selectingRegion = false
         activity = "Detecting scenes and analysing exposure"; progress = 0; exportedURL = nil
         task = Task { [sourceAccess] in
             defer { withExtendedLifetime(sourceAccess) {} }
@@ -213,7 +226,7 @@ final class AppModel: ObservableObject {
     }
 
     func beginRegionSelection() {
-        player.pause()
+        pausePlayback()
         if previewMode.isDiagnostic { previewMode = .corrected; updatePreviewLayout() }
         selectingRegion.toggle()
         refreshStill()
@@ -285,7 +298,7 @@ final class AppModel: ObservableObject {
 
     func splitAtPlayhead() {
         guard let result, !busy else { return }
-        player.pause()
+        pausePlayback()
         let index = TimelineMath.frame(at: playhead, samples: result.samples)
         guard index > 0, !sceneBoundaries.contains(index) else { return }
         let inherited = settings
@@ -315,6 +328,7 @@ final class AppModel: ObservableObject {
 
     func removeBoundary(at index: Int) {
         guard !busy else { return }
+        pausePlayback()
         sceneBoundaries.remove(index)
         sceneSettings.removeValue(forKey: index)
         setPlayhead(playhead)
@@ -323,6 +337,7 @@ final class AppModel: ObservableObject {
 
     func resetBoundaries() {
         guard let result else { return }
+        pausePlayback()
         let oldScenes = scenes, oldSettings = sceneSettings
         sceneBoundaries = SceneMath.boundaries(in: result.samples)
         sceneSettings = Dictionary(uniqueKeysWithValues: scenes.map { scene in
@@ -335,6 +350,13 @@ final class AppModel: ObservableObject {
 
     private func setPlayhead(_ time: Double) {
         guard time.isFinite else { return }
+        if playbackRequested, let scene = playbackScene {
+            // The exclusive scene end belongs to the next scene. Keep the
+            // inspector and preview on this scene while the player rewinds.
+            let last = result?.samples[scene.startFrame + scene.frameCount - 1].time ?? scene.start
+            playhead = max(scene.start, min(last, time))
+            return
+        }
         playhead = max(0, min(info?.duration ?? 0, time))
         if let scene = scenes.last(where: { $0.start <= playhead + 0.000001 }) {
             selectedSceneStart = scene.startFrame
@@ -355,7 +377,7 @@ final class AppModel: ObservableObject {
     }
 
     private func seekTime(_ time: Double) {
-        player.pause(); isPlaying = false
+        pausePlayback(); isPlaying = false
         setPlayhead(time)
         player.seek(to: CMTime(seconds: time, preferredTimescale: 60000), toleranceBefore: .zero, toleranceAfter: .zero)
         refreshStill()
@@ -366,15 +388,49 @@ final class AppModel: ObservableObject {
         else { seek(toTime: playhead + Double(count) / max(1, info?.fps ?? 24)) }
     }
 
+    private func pausePlayback() {
+        playbackRequested = false
+        playbackGeneration += 1
+        playbackScene = nil
+        player.pause()
+        player.currentItem?.forwardPlaybackEndTime = .invalid
+        isPlaying = false
+    }
+
+    private func restartPlayback(at time: Double) {
+        let generation = playbackGeneration
+        let item = player.currentItem
+        player.seek(to: CMTime(seconds: time, preferredTimescale: 60000), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
+            Task { @MainActor in
+                guard let self, finished, self.playbackRequested,
+                      self.playbackGeneration == generation, self.player.currentItem === item, !self.busy else { return }
+                self.setPlayhead(time)
+                self.player.play()
+            }
+        }
+    }
+
     func togglePlayback() {
         guard !busy, info != nil else { return }
-        if isPlaying { player.pause(); isPlaying = false; setPlayhead(player.currentTime().seconds); refreshStill() }
-        else {
-            if let result, currentFrame >= result.samples.count - 1 { seekFrame(0) }
+        if playbackRequested {
+            let time = playbackScene == nil ? player.currentTime().seconds : playhead
+            pausePlayback()
+            setPlayhead(time)
+            refreshStill()
+        } else {
+            if !loopSelectedScene, let result, currentFrame >= result.samples.count - 1 { seekFrame(0) }
+            playbackScene = loopSelectedScene ? selectedScene : nil
+            if let scene = playbackScene {
+                player.currentItem?.forwardPlaybackEndTime = CMTime(seconds: scene.end, preferredTimescale: 60000)
+            } else {
+                player.currentItem?.forwardPlaybackEndTime = .invalid
+            }
             selectingRegion = false
             stillTask?.cancel()
-            player.play()
+            playbackRequested = true
             isPlaying = true
+            // Exact seeks also cancel an earlier scrub seek before starting.
+            restartPlayback(at: playbackScene.map { max($0.start, min(playhead, $0.end - 0.000001)) } ?? playhead)
         }
     }
 
@@ -385,7 +441,7 @@ final class AppModel: ObservableObject {
 
     func updatePreviewLayout() {
         guard let asset else { return }
-        player.pause(); isPlaying = false
+        pausePlayback(); isPlaying = false
         previewCorrection.set(corrected ? curve : .empty)
         player.currentItem?.videoComposition = VideoEngine.liveComposition(asset: asset, state: previewCorrection, comparisonSize: comparisonSize, diagnostic: previewMode)
         stillImage = nil
@@ -481,7 +537,7 @@ final class AppModel: ObservableObject {
         }
         exportOptions = selection.options
         let options = selection.options
-        player.pause()
+        pausePlayback()
         activity = "Exporting corrected video"
         progress = 0
         let exportCurve = curve
@@ -683,7 +739,7 @@ extension AppModel {
         let sourceURL = candidate, sourceScope = sourceAccess
         let relinked = sourceURL.resolvingSymlinksInPath().standardizedFileURL != URL(fileURLWithPath: document.source.path).resolvingSymlinksInPath().standardizedFileURL || sourceOverride != nil
         activity = "Reopening project and checking source"; progress = 0
-        player.pause(); stillTask?.cancel()
+        pausePlayback(); stillTask?.cancel()
         task = Task {
             do {
                 let worker = Task.detached(priority: .userInitiated) { [sourceScope] in
@@ -792,7 +848,7 @@ extension AppModel {
 
     func closeSession() {
         finishSession()
-        player.pause(); stillTask?.cancel(); stillGeneration += 1
+        pausePlayback(); stillTask?.cancel(); stillGeneration += 1
         player.replaceCurrentItem(with: nil); itemObservation = nil
         sourceAccess = nil; projectAccess = nil; projectSource = nil; sourceStamp = nil
         url = nil; info = nil; projectURL = nil; result = nil

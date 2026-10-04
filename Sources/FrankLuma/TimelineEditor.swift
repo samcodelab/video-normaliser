@@ -122,6 +122,11 @@ struct TimelineEditor: View {
                 .accessibilityLabel("Next frame")
             Button { model.seekFrame((model.result?.samples.count ?? 1) - 1) } label: { Image(systemName: "forward.end.fill") }
                 .help("Last frame")
+            Toggle(isOn: $model.loopSelectedScene) {
+                Label("Loop scene", systemImage: "repeat")
+            }.toggleStyle(.button).disabled(model.selectedScene == nil)
+                .help("Repeat playback within the selected scene")
+                .accessibilityLabel("Loop selected scene")
             Spacer()
             Button { zoom(1 / 1.5, anchor: 0.5) } label: { Image(systemName: "minus.magnifyingglass") }
                 .help("Zoom out").accessibilityLabel("Zoom timeline out").disabled(viewport.zoom <= 1)

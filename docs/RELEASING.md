@@ -6,7 +6,7 @@ FrankLuma is a native macOS 14+ app with a checked-in Xcode project. Open `Frank
 
 - App and executable: `FrankLuma`
 - Bundle ID: `com.sam.frankluma`
-- Version / build: `1.0.0` / `6`, in `Configuration/Base.xcconfig`
+- Version / build: `1.0.0` / `7`, in `Configuration/Base.xcconfig`
 - Team: `PLQG3PMFP8`, matching the existing TonePebble project and installed signing identities
 - Deployment target: macOS 14.0
 - Release architectures: Apple silicon and Intel (`arm64`, `x86_64`)
@@ -16,7 +16,7 @@ The bundle identifier has a valid Mac App Store provisioning profile, confirmed 
 
 ## Local build and tests
 
-The current release candidate is **1.0.0 (build 6)**. The marketing version is the public release version; increment the build number for each new App Store Connect upload. Use 1.0.1 for a subsequent bug-fix release and 1.1.0 for a subsequent feature release. Both fields feed the app's Info.plist and standard About panel from `Configuration/Base.xcconfig`.
+The current local build is **1.0.0 (build 7)**. The marketing version is the public release version; increment the build number for each new App Store Connect upload. Use 1.0.1 for a subsequent bug-fix release and 1.1.0 for a subsequent feature release. Both fields feed the app's Info.plist and standard About panel from `Configuration/Base.xcconfig`.
 
 ```sh
 zsh scripts/build-app.sh
@@ -279,3 +279,5 @@ Native 4K verification now finds boundaries `[10, 21, 45, 66, 75, 85, 107, 129, 
 Reanalysis previously preserved every old cut even when it was untouched automatic output. It now refreshes automatic boundaries and inherits each resulting shot's existing settings. A manually altered boundary set remains authoritative. In the new app, Analyse again updates untouched automatic cuts; use Reset cuts after reanalysis to explicitly replace a manually reviewed set. Project opening still restores saved cuts.
 
 Final Store archive: `.release/app-store-20261005-101753/FrankLuma.xcarchive`, version 1.0.0 build 6. Archive succeeds; export still fails with No Accounts and missing Mac Installer Distribution signing. No build 6 package/upload is claimed. The testable optimized app is `dist/local/FrankLuma.app`; local builds preserve the notarised build 4 distribution. All 77 hosted tests pass with zero failures/skips. Final test evidence: `.build/release-tests/Logs/Test/Test-FrankLuma-2026.10.05_10-17-51-+1100.xcresult`.
+
+Build 7 adds selected-scene playback looping. The local app is ad-hoc signed; the latest App Store archive remains build 6 and the verified notarised distribution remains build 4.
