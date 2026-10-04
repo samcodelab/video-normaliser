@@ -2,6 +2,8 @@
 
 Draft for publication — 4 October 2026.
 
+Intended public URL: https://broadframestudio.com/frankluma/privacy/index.html (returned HTTP 404 when checked on 4 October 2026).
+
 FrankLuma processes video locally on your Mac. It does not upload your videos, audio, images or analysis results. It does not collect personal information, track usage, include advertising or use third-party analytics.
 
 You choose which video files FrankLuma can open and where to save projects, exported videos or diagnostics through macOS file selection. Your source video is not modified. The app creates temporary processing files locally and removes export staging files after the operation finishes. Saved projects, exports and diagnostics remain in the locations you choose until you remove them.

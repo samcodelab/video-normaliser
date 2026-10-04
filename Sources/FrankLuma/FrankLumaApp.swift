@@ -12,8 +12,10 @@ struct FrankLumaApp: App {
                 .frame(minWidth: 980, minHeight: 680)
                 .preferredColorScheme(.dark)
                 .onOpenURL { model.open($0) }
-                .onAppear { lifecycle.model = model }
-                .task { model.checkRecoveryOnLaunch() }
+                .onAppear {
+                    lifecycle.model = model
+                    DispatchQueue.main.async { model.checkRecoveryOnLaunch() }
+                }
                 .background(SessionWindowGuard(model: model))
         }
         .defaultSize(width: 1200, height: 820)
@@ -21,6 +23,8 @@ struct FrankLumaApp: App {
             CommandGroup(replacing: .help) {
                 Button("FrankLuma Help") { openWindow(id: "help") }
                 Button("Open Demo Video", action: model.openDemo).disabled(model.busy)
+                Divider()
+                Link("Privacy Policy", destination: frankLumaPrivacyPolicyURL)
             }
             CommandGroup(replacing: .newItem) {
                 Button("Open Video…", action: model.chooseVideo).keyboardShortcut("o").disabled(model.busy)
@@ -49,6 +53,7 @@ struct FrankLumaApp: App {
 
 private let accent = Color(red: 0.70, green: 0.87, blue: 0.46)
 private let muted = Color.secondary
+private let frankLumaPrivacyPolicyURL = URL(string: "https://broadframestudio.com/frankluma/privacy/index.html")!
 
 struct ContentView: View {
     @ObservedObject var model: AppModel
@@ -495,6 +500,7 @@ private struct FrankLumaHelp: View {
                 Text("⌘ + mouse wheel or trackpad pinch zooms around the pointer. Scroll to pan; Fit shows the whole clip. Click a frame slice to select it. Arrow keys step frames; Space plays or pauses. Orange cut handles snap to frames. Inspector frame steppers provide a keyboard-accessible alternative.")
                 Text("Support").font(.headline)
                 Link("support@broadframestudio.com", destination: URL(string: "mailto:support@broadframestudio.com")!)
+                Link("Privacy Policy", destination: frankLumaPrivacyPolicyURL)
                 Text("When reporting an issue, include your macOS version, source format and the steps that failed. Videos and diagnostics are only shared if you choose to send them.")
                 Text("Correction limits").font(.headline)
                 Text("Strong motion, clipped highlights and too little stable background can limit correction. Smooth flicker preserves gradual lighting changes; Steady scene can also reduce intentional fades. This is exposure correction, not a general white-balance or colour-grading tool.")

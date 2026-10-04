@@ -6,17 +6,17 @@ FrankLuma is a native macOS 14+ app with a checked-in Xcode project. Open `Frank
 
 - App and executable: `FrankLuma`
 - Bundle ID: `com.sam.frankluma`
-- Version / build: `1.0.0` / `2`, in `Configuration/Base.xcconfig`
+- Version / build: `1.0.0` / `3`, in `Configuration/Base.xcconfig`
 - Team: `PLQG3PMFP8`, matching the existing TonePebble project and installed signing identities
 - Deployment target: macOS 14.0
 - Release architectures: Apple silicon and Intel (`arm64`, `x86_64`)
 - Shared schemes: **FrankLuma**, **FrankLuma Developer ID**, **FrankLuma App Store**
 
-The bundle identifier is configured locally; an App Store Connect record and associated identifier still need to be created/confirmed in the developer account. A machine-specific `Configuration/Local.xcconfig` can override the development team. Keep export-options team IDs in sync when changing teams. Never put passwords or private keys in these files.
+The bundle identifier has a valid Mac App Store provisioning profile, confirmed by the build 3 export. An App Store Connect app record still needs to be created/confirmed in the developer account. A machine-specific `Configuration/Local.xcconfig` can override the development team. Keep export-options team IDs in sync when changing teams. Never put passwords or private keys in these files.
 
 ## Local build and tests
 
-The current release candidate is **1.0.0 (build 2)**. The marketing version is the public release version; increment the build number for each new App Store Connect upload. Use 1.0.1 for a subsequent bug-fix release and 1.1.0 for a subsequent feature release. Both fields feed the app's Info.plist and standard About panel from `Configuration/Base.xcconfig`.
+The current release candidate is **1.0.0 (build 3)**. The marketing version is the public release version; increment the build number for each new App Store Connect upload. Use 1.0.1 for a subsequent bug-fix release and 1.1.0 for a subsequent feature release. Both fields feed the app's Info.plist and standard About panel from `Configuration/Base.xcconfig`.
 
 ```sh
 zsh scripts/build-app.sh
@@ -60,11 +60,11 @@ This creates a compressed disk image with FrankLuma, an Applications shortcut an
 
 ## App Store distribution
 
-Use the **FrankLuma App Store** scheme to Archive, then choose App Store Connect in Organizer. Alternatively, `zsh scripts/archive-app.sh app-store` archives and exports locally using `Configuration/AppStoreExportOptions.plist`; it does not upload. Xcode needs an Apple Development identity for the archive, an Apple Distribution identity and appropriate App Store provisioning for distribution. Configure the account in Xcode → Settings → Accounts and resolve any signing requirements in Signing & Capabilities. Developer ID signing is for distribution outside the App Store, not an App Store submission identity.
+Use the **FrankLuma App Store** scheme to Archive, then choose App Store Connect in Organizer. Alternatively, `zsh scripts/archive-app.sh app-store --allow-provisioning-updates` lets Xcode resolve provisioning, then archives and exports locally using `Configuration/AppStoreExportOptions.plist`; it does not upload. Xcode needs an Apple Development identity for the archive, an Apple Distribution identity and appropriate App Store provisioning for distribution. Configure the account in Xcode → Settings → Accounts and resolve any signing requirements in Signing & Capabilities. Developer ID signing is for distribution outside the App Store, not an App Store submission identity.
 
-Before submission, confirm the App Store Connect record, version/build, support URL, published privacy-policy URL, screenshots, description, pricing and age rating; inspect Organizer's privacy report and validate the archive. App Store availability/review and account provisioning have not been completed by this setup.
+Before submission, confirm the App Store Connect record, version/build, support URL, published privacy-policy URL, screenshots, description, pricing and age rating; inspect Organizer's privacy report and validate the archive. Build 3 archive/export and provisioning have succeeded; App Store Connect listing, upload, availability and review remain pending.
 
-The privacy policy is currently a draft only. Publish it with a support contact and add an easily accessible link inside the app as well as in App Store Connect (App Review guideline 5.1.1). The in-app link is not yet implemented because no public policy URL has been supplied. Complete the App Privacy questionnaire to match the actual local-only, no-collection behaviour. Confirm export-compliance answers and applicable agreements, tax/banking details and regional trader disclosures in the developer account. Test the App Store-signed build through TestFlight before submission. Separate Developer ID notarisation is not required for Mac App Store distribution.
+The supplied privacy-policy URL is https://broadframestudio.com/frankluma/privacy/index.html. It is linked from the Help menu and Help window. Verification on 4 October 2026 returned HTTP 404; publish the page and confirm it is accessible before entering it in App Store Connect (App Review guideline 5.1.1). The local policy draft remains in `docs/PRIVACY.md`. Complete the App Privacy questionnaire to match the actual local-only, no-collection behaviour. Confirm export-compliance answers and applicable agreements, tax/banking details and regional trader disclosures in the developer account. Test the App Store-signed build through TestFlight before submission. Separate Developer ID notarisation is not required for Mac App Store distribution.
 
 ## Permissions and privacy
 
@@ -78,7 +78,7 @@ The user grants file access through macOS Open/Save panels, drag-and-drop or Ope
 
 FrankLuma does not record audio/video, access the Photos library, contact network services, use analytics, or request broad folder/Full Disk Access. There are no camera, microphone, Photos, network, automation, executable-memory or library-validation exceptions. Source audio is read from the selected movie; this does not require microphone permission. Projects and recovery checkpoints retain read-only security-scoped bookmarks for the selected source video. They do not grant access to arbitrary folders. Project files are retained under the Open/Save panel access for subsequent saves.
 
-`Resources/PrivacyInfo.xcprivacy` declares no tracking or collected data. The current source does not directly use required-reason API categories; revisit the manifest whenever adding preferences, file timestamps, disk-space checks, third-party SDKs or telemetry. A privacy manifest does not replace the public privacy policy or App Store privacy questionnaire. `docs/PRIVACY.md` supplies a factual policy draft for publication.
+`Resources/PrivacyInfo.xcprivacy` declares no tracking or collected data. File timestamp access is declared with reasons `3B52.1` for user-selected source metadata and `C617.1` for recovery files inside the app container. Timestamps support source-change detection and recovery ordering. Revisit the manifest whenever adding preferences, disk-space checks, third-party SDKs or telemetry. A privacy manifest does not replace the public privacy policy or App Store privacy questionnaire. `docs/PRIVACY.md` supplies a factual policy draft for publication.
 
 ## Icon
 
@@ -94,7 +94,7 @@ swift scripts/generate-app-icon.swift Resources/AppIcon-Master.png \
 - Xcode's hosted test suite passed all 45 tests with zero failures.
 - The universal Developer ID archive/export succeeded. macOS verified its signature, secure timestamp, Hardened Runtime and the two intended sandbox entitlements.
 - The exported signed app opened the selected 4K movie through the native Open panel, analysed it, and successfully exported `FrankLuma Sandbox Check.mov` through the native Save panel while sandboxed.
-- Notarisation, App Store provisioning and submission have not been performed.
+- This early verification preceded the later build 2 notarisation described below. App Store submission has not been performed.
 
 ## Apple references
 
@@ -119,7 +119,7 @@ The demo is original, procedurally generated geometric footage; its generator is
 
 Analysed sessions can be saved as `.frankluma` projects. Opening another video/project, closing the main window or quitting offers Save, Discard or Cancel for unsaved edits. Unsaved edits also have local recovery checkpoints; deliberate discard/closure clears the active checkpoint. Exports are saved videos, not editable projects. While a task is running, close/quit asks the user to wait or cancel from the main window first.
 
-Remaining device/account checks: run the App Store-signed build through TestFlight; exercise actual HDR/iPhone samples, hour-long/high-frame-rate footage, external and removable volumes, real disk-full/permission failures, macOS 14, and Intel hardware. The local automated tests do not replace those checks. The public support email is support@broadframestudio.com and is linked in Help. A live support-page URL for the store listing and published privacy-policy URL still need to be provided before submission.
+Remaining device/account checks: run the App Store-signed build through TestFlight; exercise actual HDR/iPhone samples, hour-long/high-frame-rate footage, external and removable volumes, real disk-full/permission failures, macOS 14, and Intel hardware. The local automated tests do not replace those checks. The public support email is support@broadframestudio.com and is linked in Help. The support URL is https://broadframestudio.com/frankluma/help/index.html. Both support and privacy URLs returned HTTP 404 during checks; website deployment is deferred at the user’s request.
 
 
 ### Build 2 validation
@@ -149,3 +149,17 @@ Exercise all five export choices with real H.264, SDR HEVC and SDR ProRes source
 Verify Save/Open/Save As projects in the sandboxed app, Finder opening, project drag-and-drop, source access across app restarts, bookmark tracking after moving the source, relinking a byte-identical copy, and rejection of a different source. Close/quit must offer Save/Discard/Cancel only for unsaved changes; cancelled saves and failed opens must preserve the session. Force-quit after edits and verify the recovery prompt restores cuts, per-scene reference regions, settings and export preferences. Keep one recovery for later, edit another session, and confirm the earlier recovery survives. Exercise disk-full/permission failures and autosave error reporting.
 
 Local verification for project support: the command-line suite ran 63 tests with 62 passing and the hosted bundled-demo test skipped. A separate sandboxed app (`com.sam.frankluma.projectcheck`) opened a disposable source through the native Open panel, saved an 1,800-byte project, quit and reopened it with source-bookmark access, and restored 55% strength. Editing to 65%, cancelling the close confirmation, then saving retained the edits. Renaming the disposable source and using Relink Source Video preserved the settings and saved the new source location. Recovery reconstruction and independent checkpoint cleanup were exercised by the model integration tests; force-quit recovery and Finder/drop opening still need release-device checks. The production universal sandboxed app builds and its signature verifies.
+
+
+## Build 3 submission preparation — 4 October 2026
+
+- Version 1.0.0 (3), universal arm64/x86_64, macOS 14 minimum.
+- Added Privacy Policy links to Help menu and Help window. Declared file timestamp reasons C617.1 and 3B52.1 for recovery files and user-selected source metadata. No tracking or collected data is declared.
+- Fixed startup recovery presentation: check after the editor appears and attach the recovery alert as a sheet to the editor window. Force-quit/relaunch in the isolated sandboxed release-check app showed the automatic recovery sheet; Recover Session restored the unsaved 65% strength setting.
+- Final hosted suite: 63 tests passed, zero failures or skips. Evidence: `.build/release-tests/Logs/Test/Test-FrankLuma-2026.10.04_21-09-12-+1100.xcresult`.
+- Final archive: `.release/app-store-build-3-final/FrankLuma.xcarchive`. Export: `.release/app-store-build-3-final/export/FrankLuma.pkg`. Automatic provisioning succeeded. The export summary reports Apple Distribution signing, a Mac Team Store profile, both architectures, and the intended sandbox/bookmark entitlements.
+- Listing copy, review guidance and A$19.99 one-time Australian launch price are prepared in `docs/app-store/LISTING.md`; four native-capture screenshots use the required 2560×1600 canvas.
+- Website source already includes the privacy policy and help/support page; local links/assets and `npm run build` passed. Publication is deferred at the user’s request. Neither public URL is currently verified live.
+- App Store Connect opened only its header in Safari, so app-record configuration, pricing, questionnaires and upload could not be completed in this session. No upload or submission occurred.
+
+See `docs/app-store/STATUS.md` for remaining account and device work. The earlier notarised build 2 DMG does not include later export/project/release changes.

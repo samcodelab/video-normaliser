@@ -796,7 +796,17 @@ extension AppModel {
         alert.addButton(withTitle: "Recover Session")
         alert.addButton(withTitle: "Keep for Later")
         alert.addButton(withTitle: "Discard Recovery")
-        switch alert.runModal() {
+        if let window = NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first(where: { $0.canBecomeMain }) {
+            alert.beginSheetModal(for: window) { [weak self] response in
+                self?.completeRecoveryPrompt(response, file: file, id: id)
+            }
+        } else {
+            completeRecoveryPrompt(alert.runModal(), file: file, id: id)
+        }
+    }
+
+    private func completeRecoveryPrompt(_ response: NSApplication.ModalResponse, file: URL, id: UUID) {
+        switch response {
         case .alertFirstButtonReturn:
             guard confirmLeavingSession() else { return }
             restoreRecovery(file)
