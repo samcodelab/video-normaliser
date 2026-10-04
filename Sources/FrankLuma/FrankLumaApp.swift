@@ -466,7 +466,7 @@ private struct FrankLumaHelp: View {
                 Text("Supported media").font(.headline)
                 Text("SDR videos readable by macOS, up to 4096 pixels on either side. Codec availability depends on macOS. HDR (including HLG and PQ) and protected videos are not supported. Convert them to an unprotected SDR Rec. 709 copy first.")
                 Text("Export and editing sessions").font(.headline)
-                Text("Output is QuickTime (.mov), H.264 video with the original audio tracks where compatible. Video is re-encoded, not lossless. Source files stay untouched. Scene settings are not saved as projects; closing or opening another video asks before discarding an analysed session.")
+                Text("Output choices are H.264 or HEVC in MP4/QuickTime, and ProRes 422 in QuickTime. High quality produces larger H.264/HEVC files; ProRes uses higher precision for editing. QuickTime preserves compatible original audio. MP4 preserves AAC or converts other audio to AAC, downmixing multichannel audio to stereo. Video is re-encoded, not lossless. Source files stay untouched. Scene settings are not saved as projects; closing or opening another video asks before discarding an analysed session.")
                 Text("Timeline controls").font(.headline)
                 Text("⌘ + mouse wheel or trackpad pinch zooms around the pointer. Scroll to pan; Fit shows the whole clip. Click a frame slice to select it. Arrow keys step frames; Space plays or pauses. Orange cut handles snap to frames. Inspector frame steppers provide a keyboard-accessible alternative.")
                 Text("Support").font(.headline)

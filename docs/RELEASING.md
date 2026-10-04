@@ -112,7 +112,7 @@ FrankLuma is an offline SDR exposure-flicker correction tool. No account, networ
 2. Choose Detect scenes & analyse.
 3. Select Side by side and play the clip. The original geometric animation intentionally has alternating exposure. The right-hand preview applies correction.
 4. Zoom with Command-scroll or a trackpad pinch. Select a frame slice and use Split at playhead; scene controls let you adjust boundaries and correction strength.
-5. Export to a user-chosen file. Output is SDR H.264 in a QuickTime `.mov` container, with compatible source audio preserved. The demo is intentionally silent.
+5. Export to a user-chosen file. Output is SDR H.264/HEVC in MP4 or QuickTime, or ProRes 422 in QuickTime. QuickTime preserves compatible source audio; MP4 preserves AAC and converts other audio to AAC (multichannel audio becomes stereo). The demo is intentionally silent.
 
 The demo is original, procedurally generated geometric footage; its generator is `scripts/generate-demo.swift`. It contains no third-party artwork or licensed audio. HDR (PQ/HLG), protected media and dimensions above 4096 pixels on either side are rejected with instructions to make an SDR copy. Codec decoding depends on macOS. Do not advertise lossless export, general white-balance correction or HDR support.
 
@@ -137,3 +137,8 @@ FrankLuma 1.0.0 (build 2) was signed with Developer ID Application, submitted to
 - Evidence: `.release/notarisation-32deLg/result.json`, `.release/dmg-9RdmlN/notarisation.json`
 
 The disk image contains FrankLuma.app, an Applications shortcut, and Install.txt. This completes direct-distribution signing/notarisation; it is not a Mac App Store submission or approval.
+
+
+### Format release checks
+
+Exercise all five export choices with real H.264, SDR HEVC and SDR ProRes sources on macOS 14, Intel and Apple silicon. Verify variable frame timing, rotation, colour, AAC passthrough, PCM-to-AAC conversion, multichannel downmix and audio tails. Verify ProRes gradients retain more than 8-bit precision. HEVC availability is checked by the writer; unsupported exports should report an error without replacing the destination. HDR remains unsupported.

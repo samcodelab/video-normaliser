@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class AppModel: ObservableObject {
+    @Published var exportOptions = VideoExportOptions(format: .h264MP4)
     @Published var url: URL?
     @Published var info: VideoInfo?
     @Published var player = AVPlayer()
@@ -413,14 +414,27 @@ final class AppModel: ObservableObject {
     func export() {
         guard let asset, let url, result != nil, !busy else { return }
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.quickTimeMovie]
-        panel.nameFieldStringValue = url.deletingPathExtension().lastPathComponent + " — Normalised.mov"
-        panel.message = "Export an SDR QuickTime (.mov) video encoded as H.264, with original audio. Video is re-encoded; this is not a lossless export."
+        let selection = ExportSelection(options: exportOptions)
+        let baseName = url.deletingPathExtension().lastPathComponent + " — Normalised"
+        func updatePanel(_ format: ExportFormat) {
+            panel.allowedContentTypes = [format.isMP4 ? .mpeg4Movie : .quickTimeMovie]
+            let currentName = panel.nameFieldStringValue
+            let stem = currentName.isEmpty ? baseName : (currentName as NSString).deletingPathExtension
+            panel.nameFieldStringValue = stem + "." + format.fileExtension
+        }
+        panel.nameFieldStringValue = baseName + "." + selection.options.format.fileExtension
+        updatePanel(selection.options.format)
+        panel.message = "Export corrected SDR video. MP4 preserves AAC audio; other audio is converted to AAC (multichannel audio becomes stereo). QuickTime preserves original audio."
+        let accessory = NSHostingView(rootView: ExportOptionsView(selection: selection, formatChanged: updatePanel))
+        accessory.frame = NSRect(x: 0, y: 0, width: 430, height: 125)
+        panel.accessoryView = accessory
         guard panel.runModal() == .OK, let destination = panel.url else { return }
         guard destination.resolvingSymlinksInPath().standardizedFileURL != url.resolvingSymlinksInPath().standardizedFileURL else {
             error = "Choose a different filename so the source video is preserved."
             return
         }
+        exportOptions = selection.options
+        let options = selection.options
         player.pause()
         activity = "Exporting corrected video"
         progress = 0
@@ -431,7 +445,7 @@ final class AppModel: ObservableObject {
             do {
                 let staging = try ExportStaging(destination: destination)
                 defer { withExtendedLifetime(staging) {} }
-                try await VideoEngine.export(asset: asset, curve: exportCurve, destination: staging.file) { [self] value in
+                try await VideoEngine.export(asset: asset, curve: exportCurve, destination: staging.file, options: options) { [self] value in
                     Task { @MainActor in self.progress = value }
                 }
                 try Task.checkCancellation()
@@ -473,4 +487,36 @@ final class AppModel: ObservableObject {
     }
 
     func cancel() { task?.cancel() }
+}
+
+
+@MainActor
+private final class ExportSelection: ObservableObject {
+    @Published var options: VideoExportOptions
+    init(options: VideoExportOptions) { self.options = options }
+}
+
+private struct ExportOptionsView: View {
+    @ObservedObject var selection: ExportSelection
+    let formatChanged: (ExportFormat) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Picker("Format", selection: $selection.options.format) {
+                ForEach(ExportFormat.allCases, id: \.self) { format in
+                    Text(format.title).tag(format)
+                }
+            }
+            .onChange(of: selection.options.format) { _, format in formatChanged(format) }
+            Picker("Quality", selection: $selection.options.quality) {
+                ForEach(ExportQuality.allCases, id: \.self) { quality in Text(quality.rawValue).tag(quality) }
+            }
+            .disabled(selection.options.format == .proResMOV)
+            Text(selection.options.format == .proResMOV
+                 ? "ProRes 422 uses higher precision and produces large files for editing."
+                 : "High quality produces larger files. Video is re-encoded.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(12)
+    }
 }

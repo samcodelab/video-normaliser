@@ -1,5 +1,6 @@
 import XCTest
 import AVFoundation
+import AudioToolbox
 @testable import FrankLuma
 
 final class ExposureTests: XCTestCase {
@@ -202,6 +203,99 @@ final class ExposureTests: XCTestCase {
             let duration = sorted[i].1
             return (sorted[i].0, duration.isFinite && duration > 0 ? duration :
                     (i+1 < sorted.count ? sorted[i+1].0 : end)-sorted[i].0)
+        }
+    }
+
+    func testAllExportFormatsPreserveRotatedVariableFrameTiming() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let source = folder.appendingPathComponent("source.mov")
+        try await makeTestVideo(at: source, variableTiming: true, rotated: true, frameCount: 12)
+        let expected = try await sampleTiming(source)
+        for format in ExportFormat.allCases {
+            let destination = folder.appendingPathComponent(format.rawValue + "." + format.fileExtension)
+            try await VideoEngine.export(asset: AVURLAsset(url: source), curve: .empty,
+                                         destination: destination, options: .init(format: format), progress: { _ in })
+            let asset = AVURLAsset(url: destination)
+            let info = try await VideoEngine.info(for: asset)
+            XCTAssertEqual(info.width, 128, format.title)
+            XCTAssertEqual(info.height, 192, format.title)
+            let tracks = try await asset.loadTracks(withMediaType: .video)
+            let track = try XCTUnwrap(tracks.first)
+            let descriptions = try await track.load(.formatDescriptions)
+            let expectedCodec: FourCharCode = format.codec == .h264 ? kCMVideoCodecType_H264 :
+                (format.codec == .hevc ? kCMVideoCodecType_HEVC : kCMVideoCodecType_AppleProRes422)
+            XCTAssertEqual(descriptions.first.map { CMFormatDescriptionGetMediaSubType($0) }, expectedCodec)
+            let actual = try await sampleTiming(destination)
+            XCTAssertEqual(actual.count, expected.count, format.title)
+            for (a, b) in zip(actual, expected) {
+                XCTAssertEqual(a.0, b.0, accuracy: 0.000001, format.title)
+                XCTAssertEqual(a.1, b.1, accuracy: 0.000001, format.title)
+            }
+            // The ProRes output also exercises input decoding and analysis.
+            if format == .proResMOV {
+                let analysis = try await VideoEngine.analyse(url: destination, region: nil, progress: { _ in })
+                XCTAssertEqual(analysis.samples.count, expected.count)
+            }
+        }
+    }
+
+    func testMP4ConvertsPCMAndPreservesAudioTail() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let video = folder.appendingPathComponent("video.mov")
+        try await makeTestVideo(at: video, frameCount: 12)
+        let wav = folder.appendingPathComponent("audio.wav")
+        do {
+            let audioFile = try AVAudioFile(forWriting: wav, settings: [
+                AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 48000,
+                AVNumberOfChannelsKey: 1, AVLinearPCMBitDepthKey: 16,
+                AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false])
+            let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: audioFile.processingFormat, frameCapacity: 48000))
+            buffer.frameLength = 48000
+            let data = try XCTUnwrap(buffer.floatChannelData)
+            for i in 0..<48000 { data[0][i] = Float(sin(Double(i) * 2 * .pi * 440 / 48000) * 0.2) }
+            try audioFile.write(from: buffer)
+        } // Close the WAV writer before reading its finalised header.
+        let composition = AVMutableComposition()
+        let videoAsset = AVURLAsset(url: video), audioAsset = AVURLAsset(url: wav)
+        let videoTracks = try await videoAsset.loadTracks(withMediaType: .video)
+        let videoTrack = try XCTUnwrap(videoTracks.first)
+        let audioTracks = try await audioAsset.loadTracks(withMediaType: .audio)
+        let audioTrack = try XCTUnwrap(audioTracks.first)
+        try composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid)!
+            .insertTimeRange(CMTimeRange(start: .zero, duration: CMTime(seconds: 0.5, preferredTimescale: 24)), of: videoTrack, at: .zero)
+        try composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)!
+            .insertTimeRange(CMTimeRange(start: .zero, duration: CMTime(seconds: 1, preferredTimescale: 48000)), of: audioTrack, at: .zero)
+        let combined = folder.appendingPathComponent("combined.mov")
+        let muxer = try XCTUnwrap(AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough))
+        muxer.outputURL = combined
+        muxer.outputFileType = .mov
+        await muxer.export()
+        XCTAssertEqual(muxer.status, .completed)
+        if let error = muxer.error { throw error }
+        for format in [ExportFormat.h264MP4, .hevcMP4, .h264MOV] {
+            let destination = folder.appendingPathComponent(format.rawValue + "." + format.fileExtension)
+            try await VideoEngine.export(asset: AVURLAsset(url: combined), curve: .empty, destination: destination,
+                                         options: .init(format: format), progress: { _ in })
+            let asset = AVURLAsset(url: destination)
+            let tracks = try await asset.loadTracks(withMediaType: .audio)
+            let track = try XCTUnwrap(tracks.first)
+            let descriptions = try await track.load(.formatDescriptions)
+            XCTAssertEqual(descriptions.first.map { CMFormatDescriptionGetMediaSubType($0) },
+                           format.isMP4 ? kAudioFormatMPEG4AAC : kAudioFormatLinearPCM)
+            let end = try await track.load(.timeRange).end.seconds
+            XCTAssertEqual(end, 1, accuracy: 0.03)
+            let reader = try AVAssetReader(asset: asset)
+            let output = AVAssetReaderTrackOutput(track: track, outputSettings: [AVFormatIDKey: kAudioFormatLinearPCM])
+            reader.add(output)
+            XCTAssertTrue(reader.startReading())
+            var count = 0
+            while let sample = output.copyNextSampleBuffer() { count += CMSampleBufferGetNumSamples(sample) }
+            XCTAssertEqual(reader.status, .completed)
+            XCTAssertGreaterThan(count, 46000)
         }
     }
 

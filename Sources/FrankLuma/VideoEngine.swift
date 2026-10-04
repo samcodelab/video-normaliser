@@ -213,9 +213,9 @@ enum VideoEngine {
         })
     }
 
-    static func export(asset: AVAsset, curve: ExposureCurve, destination: URL,
+    static func export(asset: AVAsset, curve: ExposureCurve, destination: URL, options: VideoExportOptions = .init(),
                        progress: @escaping @Sendable (Double) -> Void) async throws {
-        try await VideoExporter.export(asset: asset, curve: curve, destination: destination, progress: progress)
+        try await VideoExporter.export(asset: asset, curve: curve, destination: destination, options: options, progress: progress)
     }
 }
 

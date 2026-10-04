@@ -26,7 +26,7 @@ Drag FrankLuma to Applications, then open it from Applications.
 Requires macOS 14 or later. Supports Apple silicon and Intel Macs.
 
 Choose Help > Open Demo Video to try the included sample.
-SDR video only, up to 4096 pixels per side. Output: H.264 QuickTime (.mov).
+SDR video only, up to 4096 pixels per side. Output: H.264/HEVC MP4 or QuickTime, or ProRes 422 QuickTime.
 Editing sessions are not saved as projects; export your corrected video before leaving.
 
 Support: support@broadframestudio.com

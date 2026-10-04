@@ -26,7 +26,7 @@ final class ExportStaging {
     init(destination: URL) throws {
         directory = try FileManager.default.url(for: .itemReplacementDirectory,
             in: .userDomainMask, appropriateFor: destination, create: true)
-        file = directory.appendingPathComponent("FrankLuma-\(UUID().uuidString).mov")
+        file = directory.appendingPathComponent("FrankLuma-\(UUID().uuidString).\(destination.pathExtension.isEmpty ? "mov" : destination.pathExtension)")
     }
 
     func commit(to destination: URL) throws {
