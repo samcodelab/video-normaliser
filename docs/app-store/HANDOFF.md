@@ -1,28 +1,28 @@
 # FrankLuma submission handoff
 
-Prepared 5 October 2026 for **1.0.0 (9)**, bundle ID `com.sam.frankluma`, team `PLQG3PMFP8`.
+Prepared 5 October 2026 for **1.0.0 (10)**, bundle ID `com.broadframestudio.frankluma`, team `PLQG3PMFP8`.
 
 ## Verified artifact
 
-Archive: `.release/app-store-20261005-115103/FrankLuma.xcarchive`.
+Archive: `.release/app-store-20261005-115639/FrankLuma.xcarchive`.
 
-All 79 hosted tests pass, with zero failures/skips. Archive preflight and Store export both succeed. The final package is `.release/app-store-20261005-115103/export/FrankLuma.pkg`. Its installer signature verifies; its embedded app has the expected Apple Distribution signature and sandbox entitlements. The packaged privacy manifest, original demo and build metadata match the reviewed source.
+All 79 hosted tests pass, with zero failures/skips. Archive preflight and Store export both succeed. The final package is `.release/app-store-20261005-115639/export/FrankLuma.pkg`. Its installer signature verifies; its embedded app has the expected Apple Distribution signature and sandbox entitlements. The packaged privacy manifest, original demo and build metadata match the reviewed source.
 
-SHA-256: `c7a5e59d40b40894305aa10afc00083088706cbdb11fd09bce77a6def318ea26`.
+SHA-256: `a7a4b7829b029a17d013eeb12917b14660c50debee543672bde310c0bc02fe17`.
 
 No upload or Apple server validation has been performed. To recheck/re-export this exact archive if needed, use the following commands from the repository root. The preflight rejects archives from older builds.
 
 ```sh
 python3 scripts/verify-store-archive.py \
-  .release/app-store-20261005-115103/FrankLuma.xcarchive
+  .release/app-store-20261005-115639/FrankLuma.xcarchive
 xcodebuild -exportArchive \
-  -archivePath .release/app-store-20261005-115103/FrankLuma.xcarchive \
+  -archivePath .release/app-store-20261005-115639/FrankLuma.xcarchive \
   -exportOptionsPlist Configuration/AppStoreExportOptions.plist \
-  -exportPath .release/app-store-20261005-115103/export \
+  -exportPath .release/app-store-20261005-115639/export \
   -allowProvisioningUpdates
 ```
 
-Upload the resulting package through Xcode Organizer or Transporter. Do not use older build 3, 7 or 8 packages. Wait for Apple processing and resolve any reported errors before selecting build 9 for review. Developer ID notarisation is a separate direct-distribution process.
+Upload the resulting package through Xcode Organizer or Transporter. Do not use older build 3, 7, 8 or 9 packages. Wait for Apple processing and resolve any reported errors before selecting build 10 for review. Developer ID notarisation is a separate direct-distribution process.
 
 ## App Store Connect fields
 
@@ -43,3 +43,5 @@ The account holder must confirm paid-app agreements, tax/banking, availability a
 For the fastest final acceptance check, use the production-signed app to open the demo, analyse, compare, loop a scene, save/reopen a project, and export/play the result. A check on macOS 14 Apple silicon is still outstanding. See [STATUS.md](STATUS.md) for the remaining device/performance checks and known detection limitations.
 
 [Apple upload instructions](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds/) · [Certificates](https://developer.apple.com/help/account/certificates/certificates-overview/)
+
+The new app bundle ID uses a separate sandbox/recovery container. Save unsaved work in the old app as a project before switching. Project-file type/version identifiers are unchanged for compatibility. Select `com.broadframestudio.frankluma` in App Store Connect; previous-ID packages are not the current submission artifact.

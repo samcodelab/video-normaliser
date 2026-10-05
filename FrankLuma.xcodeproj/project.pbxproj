@@ -512,7 +512,7 @@
 			"isa" = "XCBuildConfiguration";
 			"baseConfigurationReference" = "293D72C1586E28A6BF43B726";
 			"buildSettings" = {
-				"PRODUCT_BUNDLE_IDENTIFIER" = "com.sam.frankluma.tests";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "com.broadframestudio.frankluma.tests";
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"GENERATE_INFOPLIST_FILE" = "YES";
 				"TEST_HOST" = "$(BUILT_PRODUCTS_DIR)/FrankLuma.app/Contents/MacOS/FrankLuma";
@@ -526,7 +526,7 @@
 			"isa" = "XCBuildConfiguration";
 			"baseConfigurationReference" = "293D72C1586E28A6BF43B726";
 			"buildSettings" = {
-				"PRODUCT_BUNDLE_IDENTIFIER" = "com.sam.frankluma.tests";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "com.broadframestudio.frankluma.tests";
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"GENERATE_INFOPLIST_FILE" = "YES";
 				"TEST_HOST" = "$(BUILT_PRODUCTS_DIR)/FrankLuma.app/Contents/MacOS/FrankLuma";
@@ -540,7 +540,7 @@
 			"isa" = "XCBuildConfiguration";
 			"baseConfigurationReference" = "293D72C1586E28A6BF43B726";
 			"buildSettings" = {
-				"PRODUCT_BUNDLE_IDENTIFIER" = "com.sam.frankluma.tests";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "com.broadframestudio.frankluma.tests";
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"GENERATE_INFOPLIST_FILE" = "YES";
 				"TEST_HOST" = "$(BUILT_PRODUCTS_DIR)/FrankLuma.app/Contents/MacOS/FrankLuma";
@@ -554,7 +554,7 @@
 			"isa" = "XCBuildConfiguration";
 			"baseConfigurationReference" = "293D72C1586E28A6BF43B726";
 			"buildSettings" = {
-				"PRODUCT_BUNDLE_IDENTIFIER" = "com.sam.frankluma.tests";
+				"PRODUCT_BUNDLE_IDENTIFIER" = "com.broadframestudio.frankluma.tests";
 				"PRODUCT_NAME" = "$(TARGET_NAME)";
 				"GENERATE_INFOPLIST_FILE" = "YES";
 				"TEST_HOST" = "$(BUILT_PRODUCTS_DIR)/FrankLuma.app/Contents/MacOS/FrankLuma";

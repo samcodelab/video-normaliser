@@ -1,26 +1,28 @@
-# Submission status — 1.0.0 (9)
+# Submission status — 1.0.0 (10)
 
 ## Current result — 5 October 2026
 
-The reviewed build 9 source passes all 79 hosted tests. Xcode account access is restored: the final universal App Store archive and package export both succeed. The package and embedded app signatures verify; the app uses Apple Distribution and the installer uses the team's Mac Developer Installer certificate. No upload, Apple server validation or review submission has been performed.
+The reviewed build 10 source passes all 79 hosted tests. Xcode account access is restored: the final universal App Store archive and package export both succeed. The package and embedded app signatures verify; the app uses Apple Distribution and the installer uses the team's Mac Developer Installer certificate. No upload, Apple server validation or review submission has been performed.
 
-Archive: `.release/app-store-20261005-115103/FrankLuma.xcarchive`.
-Package: `.release/app-store-20261005-115103/export/FrankLuma.pkg`.
-SHA-256: `c7a5e59d40b40894305aa10afc00083088706cbdb11fd09bce77a6def318ea26`.
+Archive: `.release/app-store-20261005-115639/FrankLuma.xcarchive`.
+Package: `.release/app-store-20261005-115639/export/FrankLuma.pkg`.
+SHA-256: `a7a4b7829b029a17d013eeb12917b14660c50debee543672bde310c0bc02fe17`.
 
-The packaged app has bundle ID `com.sam.frankluma`, version 1.0.0 (9), macOS 14 minimum, both architectures, sandbox/bookmark/user-selected-file entitlements, and no debug entitlement. Its privacy manifest and original demo match the reviewed source. Do not upload older build 3, 7 or 8 packages.
+The packaged app has bundle ID `com.broadframestudio.frankluma`, version 1.0.0 (10), macOS 14 minimum, both architectures, sandbox/bookmark/user-selected-file entitlements, and no debug entitlement. Its privacy manifest and original demo match the reviewed source. Do not upload older build 3, 7, 8 or 9 packages.
 
-Build 9 is available for local testing at `dist/local/FrankLuma.app`; it is ad-hoc signed. The verified Developer ID/notarised build 4 remains at `dist/FrankLuma.app` and `dist/FrankLuma-1.0.0-build-4.dmg`; it predates subsequent fixes/features. Store signing is complete, while a new Developer ID notarisation is a separate task.
+Build 10 is available for local testing at `dist/local/FrankLuma.app`; it is ad-hoc signed. The verified Developer ID/notarised build 4 remains at `dist/FrankLuma.app` and `dist/FrankLuma-1.0.0-build-4.dmg`; it predates subsequent fixes/features. Store signing is complete, while a new Developer ID notarisation is a separate task.
 
 ## Issues addressed
+
+- Changed the app bundle ID to `com.broadframestudio.frankluma`, including the hosted-test ID and archive verification. Xcode automatic provisioning/export succeeds for the new ID. The separate project-document type remains `com.sam.frankluma.project` so existing files stay compatible. The new app ID has separate sandbox/recovery storage; save unsaved sessions in the previous app before switching.
 
 - Cancelling during correction could clear the pending flag while retaining a curve from older settings, allowing stale output to be exported. Cancel now retains/recalculates the current correction in the background; export stays disabled until it is current. A native model regression covers this.
 - Local development builds previously overwrote the signed default app and merged bundles in place. `scripts/build-app.sh` now verifies a fresh staged bundle and publishes only to `dist/local/FrankLuma.app`, preserving distribution artifacts.
 - Added region-based, exposure-normalised palette comparison with a settled prior shot and three-frame confirmation. The supplied 4K clip now automatically splits the group/single-figure transition at zero-based frame 193 (displayed frame 194), plus three other genuine camera changes. No new cuts were added during continuous Hulk movement.
 - Reanalysis now refreshes untouched automatic cuts, inherits scene settings, and preserves manually reviewed boundaries.
-- Release/listing documentation now identifies build 9 rather than implying the old Store package contains the accepted algorithm.
+- Release/listing documentation now identifies build 10 rather than implying the old Store package contains the accepted algorithm.
 - Replaced the small Help text window with a searchable, offline nine-topic handbook, including detailed workflows, troubleshooting and browser links to the online handbook/privacy policy. Native UI checks verified layout, topic search, demo opening, analysis and a Save-panel H.264 export. These interactive checks use an isolated ad-hoc sandboxed app.
-- About now displays Broad Frame Studio, its copyright and a clickable website link; verified in the running build 9 app.
+- About now displays Broad Frame Studio, its copyright and a clickable website link; verified in the running build 9 app (unchanged in build 10).
 - Added Loop scene playback with real native player regression coverage: repeating the selected scene and pausing pending rewinds.
 - Added an archive preflight that verifies the current version, signing team, release architectures, sandbox, privacy manifest, original demo and four screenshot sizes; verified that it rejects the older build 6 archive. Store archive creation now runs it before export.
 
@@ -39,18 +41,18 @@ See HANDOFF.md for the exact archive/export commands and the prepared listing/re
 
 ## Remaining submission steps
 
-1. Store signing/export is complete. Upload the verified build 9 package with Organizer/Transporter once the app record is ready; no credential restoration or new archive is needed for this source.
-2. Confirm/create the macOS FrankLuma record for `com.sam.frankluma`. Enter required review contact name, email and phone.
+1. Store signing/export is complete. Upload the verified build 10 package with Organizer/Transporter once the app record is ready; no credential restoration or new archive is needed for this source.
+2. Confirm/create the macOS FrankLuma record for `com.broadframestudio.frankluma`. Enter required review contact name, email and phone.
 3. Confirm applicable paid-app agreements, tax/banking and regional trader disclosures. The account holder must accept binding agreements.
 4. Enter version 1.0.0, Video category, A$19.99 Australian price, intended regions, LISTING.md copy, live URLs and screenshots.
 5. Complete current App Privacy, age-rating and encryption/export-compliance questionnaires against the shipped app. Prepared guidance is not a completed questionnaire.
-6. Inspect Apple's processing/privacy validation, resolve any errors, and select build 9 for review. No Apple server validation has been performed here.
+6. Inspect Apple's processing/privacy validation, resolve any errors, and select build 10 for review. No Apple server validation has been performed here.
 
 TestFlight is optional. Developer ID notarisation is for direct distribution and does not replace Store signing or block an otherwise valid Store submission.
 
 ## Validation and remaining risks
 
-All 79 hosted tests pass, zero failures/skips: `.build/release-tests/Logs/Test/Test-FrankLuma-2026.10.05_11-51-08-+1100.xcresult`. Four licensed/derived short practice inputs successfully analyse, preview, export and reanalyse, preserving source frames/dimensions/duration. A real ten-minute 640×360/25 fps file completes decoding, correction, export and reanalysis with all 15,000 frames and 600 seconds preserved. Analysis plus correction takes 37.66 seconds on this Mac; export is excluded from that timing. It repeats one clip and does not establish 4K production-footage performance.
+All 79 hosted tests pass, zero failures/skips: `.build/release-tests/Logs/Test/Test-FrankLuma-2026.10.05_11-56-46-+1100.xcresult`. Four licensed/derived short practice inputs successfully analyse, preview, export and reanalyse, preserving source frames/dimensions/duration. A real ten-minute 640×360/25 fps file completes decoding, correction, export and reanalysis with all 15,000 frames and 600 seconds preserved. Analysis plus correction takes 37.66 seconds on this Mac; export is excluded from that timing. It repeats one clip and does not establish 4K production-footage performance.
 
 The final 4K verification detects 14 automatic cuts / 15 scenes and preserves all 212 frames, 3840×2160 dimensions and 17.667-second duration through export/reanalysis. The three-frame local-flash practice clip remains one scene; its 596 frames are preserved. The deliberately extreme whole-frame exposure variant adds false cuts in the near-black credit transition (297, 298, 314); the paper-animation portion retains its original boundary at 293. Automatic cuts are editable; this remains a detection limitation, not a claim of complete correction. See `../../PracticeFootage/README.md` for attributions, severity labels and reproducible audit tools. Practice files are not bundled in the app or screenshots.
 

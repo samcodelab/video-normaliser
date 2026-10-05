@@ -33,7 +33,7 @@ def main():
                          ("CFBundleVersion", "CURRENT_PROJECT_VERSION")]:
         expected = re.search(rf"^{setting}\s*=\s*(\S+)", configuration, re.M).group(1)
         require(info[key] == expected, f"Outdated archive: {key} is {info[key]}, current source is {expected}")
-    require(info["CFBundleIdentifier"] == "com.sam.frankluma", "Unexpected bundle identifier")
+    require(info["CFBundleIdentifier"] == "com.broadframestudio.frankluma", "Unexpected bundle identifier")
     require(info["LSMinimumSystemVersion"] == "14.0", "Unexpected minimum macOS version")
     require(info["LSApplicationCategoryType"] == "public.app-category.video", "Missing Video category")
     require(info.get("ITSAppUsesNonExemptEncryption") is False, "Encryption declaration differs from listing")

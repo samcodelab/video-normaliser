@@ -1,6 +1,6 @@
 # FrankLuma 1.0 App Store listing
 
-Prepared for version 1.0.0, build 9. Copy is ready for review; account settings and upload remain pending; privacy/support URLs are verified live.
+Prepared for version 1.0.0, build 10. Copy is ready for review; account settings and upload remain pending; privacy/support URLs are verified live.
 
 ## App information
 

@@ -1,5 +1,5 @@
 PRODUCT_NAME = FrankLuma
-PRODUCT_BUNDLE_IDENTIFIER = com.sam.frankluma
+PRODUCT_BUNDLE_IDENTIFIER = com.broadframestudio.frankluma
 INFOPLIST_FILE = Resources/Info.plist
 GENERATE_INFOPLIST_FILE = NO
 CODE_SIGN_ENTITLEMENTS = Resources/FrankLuma.entitlements

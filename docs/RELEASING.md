@@ -5,20 +5,20 @@ FrankLuma is a native macOS 14+ app with a checked-in Xcode project. Open `Frank
 ## Identity and build settings
 
 - App and executable: `FrankLuma`
-- Bundle ID: `com.sam.frankluma`
-- Version / build: `1.0.0` / `9`, in `Configuration/Base.xcconfig`
+- Bundle ID: `com.broadframestudio.frankluma`
+- Version / build: `1.0.0` / `10`, in `Configuration/Base.xcconfig`
 - Team: `PLQG3PMFP8`, matching the existing TonePebble project and installed signing identities
 - Deployment target: macOS 14.0
 - Release architectures: Apple silicon and Intel (`arm64`, `x86_64`)
 - Shared schemes: **FrankLuma**, **FrankLuma Developer ID**, **FrankLuma App Store**
 
-The bundle identifier has a valid Mac App Store provisioning profile, confirmed by the build 3 export. An App Store Connect app record still needs to be created/confirmed in the developer account. A machine-specific `Configuration/Local.xcconfig` can override the development team. Keep export-options team IDs in sync when changing teams. Never put passwords or private keys in these files.
+The current bundle identifier has a valid Mac App Store provisioning profile, confirmed by the build 10 export. The build 3 package used the previous identifier. An App Store Connect app record still needs to be created/confirmed in the developer account. A machine-specific `Configuration/Local.xcconfig` can override the development team. Keep export-options team IDs in sync when changing teams. Never put passwords or private keys in these files.
 
 ## Local build and tests
 
 The current Store archive and remaining account steps are documented in `docs/app-store/HANDOFF.md`. `scripts/archive-app.sh app-store` verifies the archive against the current source version and prepared assets before attempting export.
 
-The current local build is **1.0.0 (build 9)**. The marketing version is the public release version; increment the build number for each new App Store Connect upload. Use 1.0.1 for a subsequent bug-fix release and 1.1.0 for a subsequent feature release. Both fields feed the app's Info.plist and standard About panel from `Configuration/Base.xcconfig`.
+The current local build is **1.0.0 (build 10)**. The marketing version is the public release version; increment the build number for each new App Store Connect upload. Use 1.0.1 for a subsequent bug-fix release and 1.1.0 for a subsequent feature release. Both fields feed the app's Info.plist and standard About panel from `Configuration/Base.xcconfig`.
 
 ```sh
 zsh scripts/build-app.sh
@@ -284,6 +284,10 @@ Final Store archive: `.release/app-store-20261005-101753/FrankLuma.xcarchive`, v
 
 Build 7 adds selected-scene playback looping. The local app is ad-hoc signed; the latest App Store archive remains build 6 and the verified notarised distribution remains build 4.
 
-## Current submission package — 5 October 2026
+## Build 9 submission package — 5 October 2026
 
 Build 9 adds the searchable offline handbook and Broad Frame Studio About branding/link. All 79 hosted tests pass. Xcode account access is restored and Store archive/export succeeds. The verified current package is `.release/app-store-20261005-115103/export/FrankLuma.pkg`; see `docs/app-store/HANDOFF.md` for the checksum and remaining Connect fields. The package has not been uploaded or submitted. The direct-distribution notarised build remains build 4.
+
+## Current submission package — build 10
+
+The app bundle ID is now `com.broadframestudio.frankluma`. Xcode automatic provisioning and Store archive/export succeed. The current package is `.release/app-store-20261005-115639/export/FrankLuma.pkg`; see the handoff for its checksum. Previous-ID packages must not be uploaded for the new app record. Project-file identifiers remain unchanged for compatibility, while macOS assigns the new app a separate sandbox/recovery container. Save unsaved work in the old app before switching.
