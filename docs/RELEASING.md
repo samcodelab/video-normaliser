@@ -6,7 +6,7 @@ FrankLuma is a native macOS 14+ app with a checked-in Xcode project. Open `Frank
 
 - App and executable: `FrankLuma`
 - Bundle ID: `com.sam.frankluma`
-- Version / build: `1.0.0` / `7`, in `Configuration/Base.xcconfig`
+- Version / build: `1.0.0` / `9`, in `Configuration/Base.xcconfig`
 - Team: `PLQG3PMFP8`, matching the existing TonePebble project and installed signing identities
 - Deployment target: macOS 14.0
 - Release architectures: Apple silicon and Intel (`arm64`, `x86_64`)
@@ -18,7 +18,7 @@ The bundle identifier has a valid Mac App Store provisioning profile, confirmed 
 
 The current Store archive and remaining account steps are documented in `docs/app-store/HANDOFF.md`. `scripts/archive-app.sh app-store` verifies the archive against the current source version and prepared assets before attempting export.
 
-The current local build is **1.0.0 (build 7)**. The marketing version is the public release version; increment the build number for each new App Store Connect upload. Use 1.0.1 for a subsequent bug-fix release and 1.1.0 for a subsequent feature release. Both fields feed the app's Info.plist and standard About panel from `Configuration/Base.xcconfig`.
+The current local build is **1.0.0 (build 9)**. The marketing version is the public release version; increment the build number for each new App Store Connect upload. Use 1.0.1 for a subsequent bug-fix release and 1.1.0 for a subsequent feature release. Both fields feed the app's Info.plist and standard About panel from `Configuration/Base.xcconfig`.
 
 ```sh
 zsh scripts/build-app.sh
@@ -283,3 +283,7 @@ Reanalysis previously preserved every old cut even when it was untouched automat
 Final Store archive: `.release/app-store-20261005-101753/FrankLuma.xcarchive`, version 1.0.0 build 6. Archive succeeds; export still fails with No Accounts and missing Mac Installer Distribution signing. No build 6 package/upload is claimed. The testable optimized app is `dist/local/FrankLuma.app`; local builds preserve the notarised build 4 distribution. All 77 hosted tests pass with zero failures/skips. Final test evidence: `.build/release-tests/Logs/Test/Test-FrankLuma-2026.10.05_10-17-51-+1100.xcresult`.
 
 Build 7 adds selected-scene playback looping. The local app is ad-hoc signed; the latest App Store archive remains build 6 and the verified notarised distribution remains build 4.
+
+## Current submission package — 5 October 2026
+
+Build 9 adds the searchable offline handbook and Broad Frame Studio About branding/link. All 79 hosted tests pass. Xcode account access is restored and Store archive/export succeeds. The verified current package is `.release/app-store-20261005-115103/export/FrankLuma.pkg`; see `docs/app-store/HANDOFF.md` for the checksum and remaining Connect fields. The package has not been uploaded or submitted. The direct-distribution notarised build remains build 4.

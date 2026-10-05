@@ -20,6 +20,9 @@ struct FrankLumaApp: App {
         }
         .defaultSize(width: 1200, height: 820)
         .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About FrankLuma", action: showFrankLumaAbout)
+            }
             CommandGroup(replacing: .help) {
                 Button("FrankLuma Help") { openWindow(id: "help") }
                 Button("Open Demo Video", action: model.openDemo).disabled(model.busy)
@@ -47,13 +50,24 @@ struct FrankLumaApp: App {
         }
         Window("FrankLuma Help", id: "help") {
             FrankLumaHelp(openDemo: { model.openDemo(); openWindow(id: "editor") })
-        }.defaultSize(width: 520, height: 520)
+        }.defaultSize(width: 900, height: 680)
     }
 }
 
 private let accent = Color(red: 0.70, green: 0.87, blue: 0.46)
 private let muted = Color.secondary
 private let frankLumaPrivacyPolicyURL = URL(string: "https://broadframestudio.com/frankluma/privacy/index.html")!
+
+@MainActor
+private func showFrankLumaAbout() {
+    let credits = NSMutableAttributedString(string: "Broad Frame Studio\nbroadframestudio.com", attributes: [
+        .font: NSFont.systemFont(ofSize: 12),
+        .foregroundColor: NSColor.labelColor
+    ])
+    let website = (credits.string as NSString).range(of: "broadframestudio.com")
+    credits.addAttribute(.link, value: URL(string: "https://broadframestudio.com")!, range: website)
+    NSApplication.shared.orderFrontStandardAboutPanel(options: [.credits: credits])
+}
 
 struct ContentView: View {
     @ObservedObject var model: AppModel
@@ -492,27 +506,175 @@ private struct SessionWindowGuard: NSViewRepresentable {
 
 private struct FrankLumaHelp: View {
     let openDemo: () -> Void
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                Text("FrankLuma 1.0").font(.title2.bold())
-                Text("Reduce exposure flicker in stop-motion video.")
-                Text("Getting started").font(.headline)
-                Text("1. Open an SDR video, then choose Detect scenes & analyse.\n2. Compare Original and Corrected, or use Side by side.\n3. Adjust scene cuts and correction strength. Use a static reference area if subjects move.\n4. Export to a new file and check the result.")
-                Button("Open Demo Video", action: openDemo)
-                Text("Supported media").font(.headline)
-                Text("SDR videos readable by macOS, up to 4096 pixels on either side. Codec availability depends on macOS. HDR (including HLG and PQ) and protected videos are not supported. Convert them to an unprotected SDR Rec. 709 copy first.")
-                Text("Export and editing sessions").font(.headline)
-                Text("Output choices are H.264 or HEVC in MP4/QuickTime, and ProRes 422 in QuickTime. High quality produces larger H.264/HEVC files; ProRes uses higher precision for editing. QuickTime preserves compatible original audio. MP4 preserves AAC or converts other audio to AAC, downmixing multichannel audio to stereo. Video is re-encoded, not lossless. Source files stay untouched. Save Project (⌘S) preserves scene cuts, reference areas, correction settings and export options in a small .frankluma file. Keep the original video with it. Open Project rebuilds analysis and restores edits; use Relink Source Video for an identical copy that has moved. Unsaved edits are autosaved locally for crash recovery. Closing or opening another file offers Save, Discard or Cancel. Exporting a movie does not save your project.")
-                Text("Timeline controls").font(.headline)
-                Text("⌘ + mouse wheel or trackpad pinch zooms around the pointer. Scroll to pan; Fit shows the whole clip. Click a frame slice to select it. Arrow keys step frames; Space plays or pauses. Enable Loop scene to repeat the selected scene while reviewing correction. Orange cut handles snap to frames. Inspector frame steppers provide a keyboard-accessible alternative.")
-                Text("Support").font(.headline)
-                Link("support@broadframestudio.com", destination: URL(string: "mailto:support@broadframestudio.com")!)
-                Link("Privacy Policy", destination: frankLumaPrivacyPolicyURL)
-                Text("When reporting an issue, include your macOS version, source format and the steps that failed. Videos and diagnostics are only shared if you choose to send them.")
-                Text("Correction limits").font(.headline)
-                Text("Strong motion, clipped highlights and too little stable background can limit correction. Smooth flicker preserves gradual lighting changes; Steady scene can also reduce intentional fades. This is exposure correction, not a general white-balance or colour-grading tool.")
-            }.font(.body).textSelection(.enabled).padding(24)
-        }.frame(minWidth: 440, minHeight: 420)
+    @State private var selection: HandbookTopic? = .gettingStarted
+    @State private var search = ""
+    private var topics: [HandbookTopic] {
+        HandbookTopic.allCases.filter { search.isEmpty || $0.searchText.localizedCaseInsensitiveContains(search) }
     }
+    var body: some View {
+        NavigationSplitView {
+            List(selection: $selection) {
+                ForEach(topics) { topic in
+                    Label(topic.rawValue, systemImage: topic.symbol).tag(topic)
+                }
+            }
+            .navigationTitle("Handbook")
+            .searchable(text: $search, prompt: "Search help")
+            .navigationSplitViewColumnWidth(min: 200, ideal: 225, max: 270)
+            .overlay {
+                if topics.isEmpty {
+                    ContentUnavailableView.search(text: search)
+                }
+            }
+        } detail: {
+            let topic = selection ?? .gettingStarted
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("FRANKLUMA HANDBOOK").font(.caption.weight(.semibold)).foregroundStyle(accent)
+                        Text(topic.rawValue).font(.largeTitle.weight(.semibold))
+                        Text(topic.introduction).font(.title3).foregroundStyle(.secondary)
+                    }
+                    if topic == .gettingStarted {
+                        Button("Open Demo Video", action: openDemo).controlSize(.large)
+                        Text("The included silent demo is original geometric animation with deliberately uneven exposure.")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                    ForEach(topic.sections.indices, id: \.self) { index in
+                        let section = topic.sections[index]
+                        VStack(alignment: .leading, spacing: 9) {
+                            Text(section.title).font(.headline)
+                            Text(section.body).lineSpacing(4).fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    Divider()
+                    HStack {
+                        Link("Online handbook", destination: URL(string: "https://broadframestudio.com/frankluma/help/")!)
+                        Spacer()
+                        Link("Privacy policy", destination: frankLumaPrivacyPolicyURL)
+                    }.font(.callout)
+                    Text("This handbook is included in the app and works offline. Online links open in your browser.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                .textSelection(.enabled)
+                .frame(maxWidth: 650, alignment: .leading)
+                .padding(30)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .id(topic)
+            .navigationTitle(topic.rawValue)
+        }
+        .frame(minWidth: 760, minHeight: 520)
+        .onChange(of: search) { _, _ in
+            if let first = topics.first, !topics.contains(selection ?? .gettingStarted) { selection = first }
+        }
+    }
+}
+
+private struct HandbookSection {
+    let title: String
+    let body: String
+    init(_ title: String, _ body: String) { self.title = title; self.body = body }
+}
+
+private enum HandbookTopic: String, CaseIterable, Identifiable {
+    case gettingStarted = "Getting started"
+    case scenes = "Scene boundaries"
+    case correction = "Correction & references"
+    case preview = "Timeline & preview"
+    case export = "Exporting video"
+    case projects = "Projects & recovery"
+    case media = "Supported media"
+    case troubleshooting = "Troubleshooting"
+    case support = "Privacy & support"
+    var id: Self { self }
+    var searchText: String { rawValue + " " + introduction + " " + sections.map { $0.title + " " + $0.body }.joined(separator: " ") }
+    var symbol: String {
+        switch self {
+        case .gettingStarted: return "play.rectangle"
+        case .scenes: return "scissors"
+        case .correction: return "slider.horizontal.3"
+        case .preview: return "film"
+        case .export: return "square.and.arrow.up"
+        case .projects: return "folder"
+        case .media: return "video"
+        case .troubleshooting: return "wrench.and.screwdriver"
+        case .support: return "questionmark.circle"
+        }
+    }
+    var introduction: String {
+        switch self {
+        case .gettingStarted: return "Your first stop-motion correction, from source clip to finished movie."
+        case .scenes: return "Keep different shots separate so correction stays within each scene."
+        case .correction: return "Reduce exposure flicker while protecting movement and intentional lighting changes."
+        case .preview: return "Compare the same frames and review correction over time."
+        case .export: return "Choose a sharing copy or an editing format, then check the encoded result."
+        case .projects: return "Keep editable settings, reconnect your source, and recover unsaved work."
+        case .media: return "What you can open and export on your Mac."
+        case .troubleshooting: return "Practical checks for correction, access, playback and export problems."
+        case .support: return "Processing stays on your Mac. You choose what to share with support."
+        }
+    }
+    var sections: [HandbookSection] {
+        switch self {
+        case .gettingStarted: return [
+            .init("1. Open and analyse", "Choose Open Video… (⌘O), drop a video into the window, or try the included demo. Choose Detect scenes & analyse and wait for analysis to complete. Use SDR video with no side larger than 4096 pixels; see Supported media if your clip is rejected."),
+            .init("2. Review the scene cuts", "Select each scene and step around its beginning and end with the arrow keys. Different camera shots should be separate scenes, even when they share a background. Automatic detection can miss cuts or mistake a flash for a cut. Split or merge scenes before tuning correction."),
+            .init("3. Compare and adjust", "Choose Side by side in the Preview menu: Original is on the left and Corrected on the right. Start with Smooth flicker and a 0.5 s radius. Adjust strength for the selected scene, then play it. Enable Loop scene to review that scene repeatedly. Use a stable background reference when moving subjects dominate the measurement."),
+            .init("4. Save your work and export", "Save Project (⌘S) keeps editable settings; retain the original video. Export… (⇧⌘E) writes a separate corrected movie. Open that result in a player or editor and check the difficult frames, cuts, duration and audio. Exporting does not save your project.")
+        ]
+        case .scenes: return [
+            .init("Inspect before correcting", "Click a scene band or frame on the timeline. Use ← and → to inspect adjacent source frames. A group shot changing to a close-up needs its own boundary even if exposure and background remain similar. The correction window must not combine different shots."),
+            .init("Add or move a cut", "Select the first frame of the new shot and choose Split at playhead. Drag an orange cut handle to move an existing boundary; it snaps to frames. The inspector’s start/end frame steppers provide an exact keyboard-accessible alternative. Boundaries cannot cross or create empty scenes."),
+            .init("Merge an unnecessary cut", "Select the scene after the unwanted cut and choose Merge previous. Review the merged scene’s correction afterwards. This is useful when a lighting flash was mistaken for a camera cut."),
+            .init("Analyse again and reset cuts", "Analyse again refreshes automatic cuts if you have not manually edited them. Manually reviewed boundaries are preserved. Reset cuts explicitly restores the detected boundaries and removes your manual changes. Save a separate project version before resetting cuts you may want to keep.")
+        ]
+        case .correction: return [
+            .init("Smooth flicker or Steady scene?", "Smooth flicker reduces rapid exposure variation while retaining gradual lighting changes. The smoothing radius controls the surrounding time used to estimate a target: a larger radius can remove longer variations but can also soften intentional changes. Steady scene uses one exposure target across the scene and can reduce intentional fades. Use it for a shot whose lighting should stay constant."),
+            .init("Strength and spatial correction", "Strength controls the overall correction; zero leaves the scene uncorrected. Spatial correction addresses supported local exposure and tone changes. Set it to zero for global correction only. Start with the defaults and judge the picture in playback, including shadows, fine texture and highlights."),
+            .init("Choose a reference area", "Expand Reference area and choose Select reference area. Drag over a static background patch in the preview; in Side by side, draw on the original image on the left. Choose a reasonably sized area that stays visible and avoids moving objects, changing shadows, clipped highlights or very dark regions. Compare it across the entire scene."),
+            .init("Use whole frame or copy settings", "Use whole frame removes a custom reference. A reference belongs to the selected scene and does not alter scene detection. Apply these settings to all scenes copies both correction settings and the reference rectangle. Review each shot first: the same rectangle may contain a moving subject after a camera cut."),
+            .init("Understand the limits", "Strong motion and too little stable background can limit correction. Fewer than 12 usable stable patches produces zero correction with a notice. Clipped highlight detail cannot be restored. Exposure correction does not replace white-balance correction or colour grading. A smoother graph alone does not establish a better picture.")
+        ]
+        case .preview: return [
+            .init("Scrub, step and zoom", "Click or drag on the timeline to scrub. ← and → step one source frame; Space plays or pauses. First/last buttons go to the clip’s edges. Pinch or Command-scroll zooms around the pointer; ordinary scroll pans. Fit shows the whole clip."),
+            .init("Loop the selected scene", "Select a scene, enable Loop scene beside the transport buttons, and press Play. Playback repeats from that scene’s first frame when it reaches the boundary, including the final scene of the clip. Pause, scrubbing, scene selection or editing cuts stops playback. Press Play again to review the newly selected scene. Disable Loop scene for normal playback across the clip."),
+            .init("Preview modes", "Original and Corrected show one picture. Side by side shows the same source frame on both sides. These modes affect preview only: export always writes one corrected picture at the source dimensions. Confidence mask, Motion mask and Correction field help inspect measurement support, movement and the effective correction."),
+            .init("Read the exposure graph", "The cyan original and green corrected-global curves use the same per-scene baseline. Local exposure and tone adjustments are not represented by that global line. The correction field and actual picture can reveal changes the line does not show."),
+            .init("Save diagnostics", "Expand Diagnostics and choose Save diagnostics… to write frame measurements and correction data locally. These are technical review aids, not an encoded-output quality score. Mean estimates exclude pixel-level protection. Review a diagnostic file before choosing to send it to anyone.")
+        ]
+        case .export: return [
+            .init("Review before exporting", "Play the clip and inspect scene cuts, flashes, shadows and highlights. Finish correction changes and wait for processing to complete. Choose Export… (⇧⌘E), name the file and select a writable destination in the Save panel."),
+            .init("Choose a format", "MP4 — H.264 is a broadly compatible sharing choice. HEVC can produce smaller files, but check the receiving player or editor. H.264 and HEVC also support QuickTime. QuickTime — ProRes 422 is intended for further editing and needs more storage. Export re-encodes the video; none of these choices makes a lossless copy of the source."),
+            .init("Quality and audio", "Standard and High quality are available for H.264/HEVC; High produces larger files. ProRes uses a higher-precision processing path. QuickTime preserves compatible original audio. MP4 preserves AAC and converts other audio to AAC; multichannel audio becomes stereo. Choose QuickTime when keeping compatible original tracks matters. The included demo is silent."),
+            .init("Finish and check the movie", "Keep the source drive connected and allow space for processing. Cancellation or failure leaves an existing destination intact. The source stays untouched. Use Show in Finder and open the result in a player or editor. Check dimensions/orientation, duration, the last frame, audio and difficult scenes. Save Project separately if you want to resume editing.")
+        ]
+        case .projects: return [
+            .init("Save editable settings", "Save Project (⌘S) creates a small .frankluma file containing cuts, references, correction settings, export options, current frame and preview mode. It links the original video and does not embed it or cached analysis. Back up both the project and its exact source video. Project files can reveal source paths and editing settings."),
+            .init("Save another version", "Save Project As… (⇧⌘S) creates a separately named editing version and makes it the active save destination. Later Save Project updates that copy. A movie export and an editable project are separate outputs."),
+            .init("Reopen or relink", "Use Open Project… (⇧⌘O), Finder or drag-and-drop. FrankLuma checks the source and repeats analysis before restoring edits. Keep the source drive connected. If a source has moved, macOS bookmarks may find it; otherwise locate it when prompted or choose File → Relink Source Video…. Relinking requires the original or a byte-identical copy. A re-encoded or modified movie needs a new session."),
+            .init("Recover unsaved changes", "Unsaved edits are checkpointed locally after a brief delay. On launch, choose Recover, Keep for Later or Discard for an offered checkpoint. File → Recover Unsaved Session opens the newest checkpoint; other checkpoints remain available afterwards. Recovery requires the original source and repeats analysis. Save Project to retain a recovered session."),
+            .init("Before closing", "Opening another file, closing or quitting with unsaved edits offers Save, Discard or Cancel. Cancel keeps editing. A successful save or deliberate discard/closure removes that session’s recovery checkpoint. If a recovery warning appears, save the project manually. During processing, wait or cancel the operation before closing.")
+        ]
+        case .media: return [
+            .init("Requirements", "FrankLuma requires macOS 14 or later. Input must be unprotected SDR video readable by macOS, no larger than 4096 pixels on either side. Codec availability depends on your Mac and macOS. H.264/HEVC in MP4 or MOV and SDR ProRes in MOV are common choices."),
+            .init("HDR and protected media", "HDR, including HLG and PQ, and protected videos are not supported. Convert to an unprotected SDR Rec. 709 copy in a video editor before opening it. Simply changing the file extension does not convert colour or codec. Keep the original footage."),
+            .init("Source timing and orientation", "Analysis uses actual decoded frame timestamps, including variable frame timing. Export preserves the source picture dimensions/orientation and frame timing. Side by side is a preview layout and does not create a split-screen movie."),
+            .init("Long clips", "Decoding and exporting longer or higher-resolution clips takes more time. Keep the source available and wait for the activity to finish before exporting. Review several difficult scenes and check the full output rather than assuming one corrected frame represents the whole film.")
+        ]
+        case .troubleshooting: return [
+            .init("Flicker remains", "Inspect the actual frames in a loop. Confirm the scene contains one shot, strength is above zero, and the stable-patch notice is not reporting too little support. Try a suitable static reference and compare Smooth flicker with Steady scene. Increase radius cautiously for longer variations. Strong movement, local shadows, colour shifts and clipped highlights may limit results."),
+            .init("A cut is missing or a flash becomes a scene", "Step to the first frame of the new shot and use Split at playhead. Merge previous removes a false cut. Automatic detection is an aid; review boundaries before correction. Analyse again preserves manually edited cuts; Reset cuts replaces them with detected cuts."),
+            .init("Opening or relinking fails", "Confirm the file is accessible, the source drive is connected, and the video is unprotected SDR within the size limit. Select the file again through the Open panel. Projects require the exact source content; a visually similar re-encode does not match. Open a modified video as a new session."),
+            .init("Playback or processing seems stalled", "Check the activity and error message. Keep external drives connected. Let analysis/correction finish before exporting. If cancellation is available, let it complete before retrying. Try the included demo to distinguish a source-specific problem. Record the operation and exact error when contacting support."),
+            .init("Export fails or the shared movie is old", "Check free storage, source availability and destination write access. Choose another writable local destination in the Save panel. Try QuickTime if audio conversion is failing. After changing correction, export a new movie: saving the project does not update an earlier export. Open the actual exported file and check audio and the final frame."),
+            .init("Recovery or saving reports an error", "Save the project manually to a writable location. Keep both the project and source. A recovery checkpoint is a safeguard, not a substitute for a saved project or backup. Include the exact save/recovery error in your support request.")
+        ]
+        case .support: return [
+            .init("Local processing", "FrankLuma does not upload footage and has no accounts, advertising, tracking or third-party analytics. It reads files you select through macOS and saves projects, exports and diagnostics where you choose. Recovery checkpoints stay in the app’s local storage. Source videos are not modified."),
+            .init("Contact support", "Email support@broadframestudio.com. Include your app/macOS versions, the step that failed, exact error, source dimensions/codec/container, scene/frame and selected export format. Try the included demo if possible and mention whether the issue occurs there too."),
+            .init("Share only what you choose", "Private videos, projects and diagnostics are shared only if you send them. Review attachments first; projects can contain source filenames/paths and editing settings. A small non-private example and clear reproduction steps are often enough. The online privacy policy explains storage and voluntary support emails.")
+        ]
+    }
+}
 }

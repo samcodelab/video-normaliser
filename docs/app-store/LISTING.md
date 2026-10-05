@@ -1,6 +1,6 @@
 # FrankLuma 1.0 App Store listing
 
-Prepared for version 1.0.0, build 7. Copy is ready for review; account settings and upload remain pending; privacy/support URLs are verified live.
+Prepared for version 1.0.0, build 9. Copy is ready for review; account settings and upload remain pending; privacy/support URLs are verified live.
 
 ## App information
 
@@ -18,7 +18,7 @@ Support URL: https://broadframestudio.com/frankluma/help/ (verified live, includ
 
 Price: A$19.99, one-time purchase in the Australian storefront. Select this price in App Store Connect and review automatic prices in other regions. No subscriptions or in-app purchases are implemented.
 
-Copyright: © 2026 Samir Aganovic
+Copyright: © 2026 Broad Frame Studio
 
 ## Description
 
@@ -33,7 +33,7 @@ Open a clip, detect scenes and analyse the lighting. Compare your original and c
 • Save editable projects and reopen them later with your original source video.
 • Recover unsaved edits from local autosave checkpoints.
 • Export H.264 or HEVC in MP4 or QuickTime, or ProRes 422 in QuickTime.
-• Try the included demo without supplying your own footage.
+• Follow the searchable offline handbook and try the included demo.
 
 Your source videos remain untouched. FrankLuma has no accounts, advertising or third-party analytics, and does not upload your footage.
 
