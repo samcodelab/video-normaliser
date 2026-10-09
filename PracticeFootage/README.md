@@ -8,6 +8,7 @@ These local videos are deliberately outside the shipped app and are ignored by G
 | --- | --- | --- | --- |
 | `LanaBanana-first-stop-motion.mov` | LanaBanana (film credits: Lana Genc), [Stop motion animation](https://commons.wikimedia.org/wiki/File:Stop_motion_animation.webm) | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) | Wikimedia's 640×360 MPEG-4 transcode; 16.32 seconds, 25 fps, 408 frames. Paper animation, shadows and scene/credit transitions. |
 | `Holodropfilms-stopmotion.mov` | Holodropfilms, [Holodropfilms – stopmotion](https://commons.wikimedia.org/wiki/File:Holodropfilms_-_stopmotion.webm) | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) | Wikimedia's 640×360 MPEG-4 transcode; 23.84 seconds, 25 fps, 596 frames. Outdoor pixilation, moving people/vehicles and camera changes. |
+| `Teja-clay-stop-motion.mov` | Teja Silaparasetty, [Stop-Motion Animation (Basic)](https://commons.wikimedia.org/wiki/File:Stop-Motion_Animation_(Basic).webm) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | Wikimedia's 480×360 MPEG-4 transcode; 597 frames at 29 fps, 20.586 seconds, no audio. Clay and cotton-armature animation with changing shapes and shadows. Licence verified 6 October 2026; downloaded specifically for the v30 review. |
 
 The base clips are useful varied-content checks, not verified examples of extremely bad natural flicker. They are lower-resolution transcodes, not camera originals. No author endorses FrankLuma.
 
@@ -15,6 +16,7 @@ Original download URLs:
 
 - https://upload.wikimedia.org/wikipedia/commons/transcoded/b/b8/Stop_motion_animation.webm/Stop_motion_animation.webm.360p.mpeg4.mov
 - https://upload.wikimedia.org/wikipedia/commons/transcoded/8/80/Holodropfilms_-_stopmotion.webm/Holodropfilms_-_stopmotion.webm.360p.mpeg4.mov
+- https://upload.wikimedia.org/wikipedia/commons/transcoded/4/47/Stop-Motion_Animation_%28Basic%29.webm/Stop-Motion_Animation_%28Basic%29.webm.360p.mpeg4.mov
 
 ## Severe, explicitly synthetic variants
 

@@ -1,6 +1,7 @@
 #!/bin/zsh
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "${0:A:h:h}"
+source scripts/correction-sources.sh
 mkdir -p .build/audit '.build/Spatial Final Audit.app/Contents/MacOS'
 cp '/Users/sam/Downloads/My_Stop_Motion_Movie(16).mov' .build/audit/source-input.mov
 cp '/Users/sam/Downloads/My_Stop_Motion_Movie(16) — Normalised.mov' .build/audit/supplied-input.mov
@@ -9,10 +10,7 @@ CLANG_MODULE_CACHE_PATH="$PWD/.build/ModuleCache" swiftc \
   -parse-as-library -O -target arm64-apple-macosx14.0 -swift-version 5 \
   -Xfrontend -disable-sandbox -suppress-warnings \
   -module-cache-path "$PWD/.build/ModuleCache" \
-  Sources/FrankLuma/Exposure.swift Sources/FrankLuma/Scenes.swift \
-  Sources/FrankLuma/PatchExposure.swift Sources/FrankLuma/SpatialLighting.swift \
-  Sources/FrankLuma/SpatialRenderer.swift Sources/FrankLuma/VideoGeometry.swift \
-  Sources/FrankLuma/VideoEngine.swift Sources/FrankLuma/VideoExporter.swift \
+  "${CORRECTION_SOURCES[@]}" \
   scripts/validation/SpatialAudit.swift \
   -o '.build/Spatial Final Audit.app/Contents/MacOS/Audit'
 cat > '.build/Spatial Final Audit.app/Contents/Info.plist' <<'PLIST'

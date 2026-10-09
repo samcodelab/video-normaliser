@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "clay-armature",
+      "source": "PracticeFootage/Teja-clay-stop-motion.mov",
+      "category": "Previously untested clay and cotton-armature stop motion; changing shape and shadows",
+      "expectedFrames": 597,
+      "reviewedCuts": null,
+      "reviewFrames": [80, 81, 82, 240, 241, 242, 420, 421, 422],
+      "rights": "Teja Silaparasetty, Stop-Motion Animation (Basic), CC0 1.0; Wikimedia Commons licence verified 6 October 2026",
+      "groundTruth": null
+    },
+    {
+      "id": "fox-three-scenes",
+      "source": "/Users/sam/Downloads/FrankLuma-Fox-60s-Three-Scenes-v2.mp4",
+      "category": "Stop-motion-style footage with local lighting changes and moving character",
+      "expectedFrames": 600,
+      "reviewedCuts": [200, 400],
+      "reviewFrames": [168, 169, 170, 348, 349, 350, 558, 559, 560],
+      "rights": "User-provided local test media; no redistribution permission assumed",
+      "groundTruth": null
+    },
+    {
+      "id": "lego-4k",
+      "source": "/Users/sam/Downloads/My_Stop_Motion_Movie(22).mov",
+      "category": "4K stop motion, moving foreground, audio, shadows and exposure changes",
+      "expectedFrames": 212,
+      "reviewedCuts": null,
+      "reviewFrames": [12, 13, 14, 40, 42, 44, 79, 82, 85, 187, 188, 189],
+      "rights": "User-provided local test media; no redistribution permission assumed",
+      "groundTruth": null
+    },
+    {
+      "id": "paper-animation",
+      "source": "PracticeFootage/LanaBanana-first-stop-motion.mov",
+      "category": "Paper animation, changing shadows and credit transitions; natural-content control",
+      "expectedFrames": 408,
+      "reviewedCuts": null,
+      "reviewFrames": [80, 81, 82, 200, 201, 202, 293, 297, 298],
+      "rights": "LanaBanana (Lana Genc), CC BY 3.0; retain PracticeFootage/README.md attribution",
+      "groundTruth": null
+    },
+    {
+      "id": "outdoor-pixilation",
+      "source": "PracticeFootage/Holodropfilms-stopmotion.mov",
+      "category": "Moving people, vehicles, outdoor light and camera changes; natural-content control",
+      "expectedFrames": 596,
+      "reviewedCuts": null,
+      "reviewFrames": [80, 81, 82, 86, 219, 220, 221, 517, 518],
+      "rights": "Holodropfilms, CC BY 3.0; retain PracticeFootage/README.md attribution",
+      "groundTruth": null
+    }
+  ]
+}

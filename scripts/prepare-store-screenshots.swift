@@ -2,16 +2,32 @@ import AppKit
 
 // Frame genuine, unaltered app captures on Apple's 2560 × 1600 Mac canvas.
 let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-let directory = root.appendingPathComponent("docs/app-store/screenshots")
+let directory = CommandLine.arguments.count > 2
+    ? URL(fileURLWithPath: CommandLine.arguments[2])
+    : root.appendingPathComponent("docs/app-store/screenshots")
+let captures = CommandLine.arguments.count > 1
+    ? URL(fileURLWithPath: CommandLine.arguments[1])
+    : directory.appendingPathComponent("raw")
 let shots = [
-    ("01-comparison", "Compare before you export", "Original and corrected previews, side by side."),
-    ("02-scenes", "Fine-tune each scene", "Refine scene cuts and correction on a zoomable timeline."),
-    ("03-reference", "Choose a stable reference", "Use background lighting to guide exposure correction."),
-    ("04-export", "Choose your delivery format", "H.264 and HEVC for sharing. ProRes 422 for editing.")
+    ("01-workspace", "Reduce stop-motion flicker", "Bring more consistent exposure to your animation."),
+    ("02-comparison", "Compare every frame", "Original and corrected footage, side by side."),
+    ("03-controls", "Fine-tune each scene", "Adjust strength, smoothing and local correction."),
+    ("04-review", "Review. Loop. Refine.", "Repeat a scene and check the frames that matter."),
+    ("05-export", "Export and keep creating", "H.264 and HEVC for sharing. ProRes 422 for editing.")
 ]
-for (name, title, subtitle) in shots {
-    guard let capture = NSImage(contentsOf: directory.appendingPathComponent("raw/\(name).png")),
-          let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2560, pixelsHigh: 1600,
+// Read every source first so missing captures cannot publish a partial set.
+let images = shots.map { name, _, _ -> NSImage in
+    guard let image = NSImage(contentsOf: captures.appendingPathComponent("\(name).png")) else {
+        fatalError("Missing capture: \(name)")
+    }
+    return image
+}
+try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+for (index, shot) in shots.enumerated() {
+    let (name, title, subtitle) = shot
+
+    let capture = images[index]
+    guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2560, pixelsHigh: 1600,
                                        bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
                                        isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
           let context = NSGraphicsContext(bitmapImageRep: bitmap) else { fatalError("Missing capture: \(name)") }
