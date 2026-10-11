@@ -278,6 +278,11 @@ enum SurfaceTracking {
             return descriptors[y * width + x]
         }
         func lighting(x: Int,y: Int) -> [Double]? { at(x,y)?.mean }
+        /// Source-only audit information; never supplies lighting or a match.
+        func geometrySummary(x: Int,y: Int) -> (energy:Double,textureCount:Int)? {
+            guard let value = at(x,y) else {return nil}
+            return (value.energy,value.texture.count)
+        }
         func neutralSupport(x: Int,y: Int,offsetX: Double = 0,offsetY: Double = 0) -> Double? {
             guard SurfaceTracking.contrastPhotometryEnabled else { return nil }
             return SurfaceTracking.neutralTextureSupport(image,x: Double(x)+offsetX,y: Double(y)+offsetY)
@@ -364,14 +369,23 @@ enum SurfaceTracking {
     /// Reject disocclusions and uncertain patches with a reverse correspondence.
     static func match(_ source: Prepared, _ reference: Prepared,
                       x: Int, y: Int, radius: Int = 8, motion: SurfaceMotion.Model? = nil,flow: SurfaceMotion.Flow? = nil,
-                      offsetX: Double = 0,offsetY: Double = 0,subpixel: Bool = subpixelEnabled,contrastInvariant: Bool = contrastTrackingEnabled) -> Match? {
+                      offsetX: Double = 0,offsetY: Double = 0,subpixel: Bool = subpixelEnabled,contrastInvariant: Bool = contrastTrackingEnabled,
+                      diagnostic: ((String, Match?, Match?) -> Void)? = nil) -> Match? {
         guard source.width == reference.width, source.height == reference.height, source.half == reference.half else { return nil }
         func checked(_ prediction: (Double,Double)?, guided: Bool) -> Match? {
-            guard let forward = search(source,reference,x: x,y: y,radius: radius,predicted: prediction,offsetX: offsetX,offsetY: offsetY,subpixel: subpixel,contrastInvariant: contrastInvariant),forward.confidence > 0.3,
-                  let reverse = search(reference,source,x: forward.x,y: forward.y,radius: radius,
-                    predicted: guided ? motion?.inverse(Double(forward.x)+forward.offsetX,Double(forward.y)+forward.offsetY) : nil,
-                    offsetX: forward.offsetX,offsetY: forward.offsetY,subpixel: subpixel,contrastInvariant: contrastInvariant),reverse.confidence > 0.3,
-                  abs(Double(reverse.x-x)+reverse.offsetX-offsetX) <= 1,abs(Double(reverse.y-y)+reverse.offsetY-offsetY) <= 1 else { return nil }
+            let forward = search(source,reference,x: x,y: y,radius: radius,predicted: prediction,offsetX: offsetX,offsetY: offsetY,subpixel: subpixel,contrastInvariant: contrastInvariant)
+            guard let forward else { diagnostic?("noForwardCandidate",nil,nil); return nil }
+            guard forward.confidence > 0.3 else { diagnostic?("forwardConfidence",forward,nil); return nil }
+            let reverse = search(reference,source,x: forward.x,y: forward.y,radius: radius,
+                predicted: guided ? motion?.inverse(Double(forward.x)+forward.offsetX,Double(forward.y)+forward.offsetY) : nil,
+                offsetX: forward.offsetX,offsetY: forward.offsetY,subpixel: subpixel,contrastInvariant: contrastInvariant)
+            guard let reverse else { diagnostic?("noReverseCandidate",forward,nil); return nil }
+            guard reverse.confidence > 0.3 else { diagnostic?("reverseConfidence",forward,reverse); return nil }
+            guard abs(Double(reverse.x-x)+reverse.offsetX-offsetX) <= 1,
+                  abs(Double(reverse.y-y)+reverse.offsetY-offsetY) <= 1 else {
+                diagnostic?("reciprocalPosition",forward,reverse); return nil
+            }
+            diagnostic?("accepted",forward,reverse)
             return forward
         }
         let local = checked(nil,guided: false)

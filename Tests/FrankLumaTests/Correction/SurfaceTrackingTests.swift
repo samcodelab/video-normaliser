@@ -2,6 +2,73 @@ import XCTest
 @testable import FrankLuma
 
 final class SurfaceTrackingTests: XCTestCase {
+    func testFixedGeometrySupportBridgesContrastDrivenDescriptorSizeSwitch() throws {
+        let w = 40,h = 32,cx = 20,cy = 16
+        var seed:UInt64 = 123
+        let noise = (0..<w*h).map { _ -> Double in
+            seed = seed &* 6364136223846793005 &+ 1
+            return Double((seed >> 32)%1000)/500-1
+        }
+        func image(_ contrast:Double) -> SpatialThumbnail {
+            let rgb = (0..<w*h).flatMap { p -> [Float] in
+                let x = p%w,y = p/w
+                let amplitude = abs(x-cx) <= 2 && abs(y-cy) <= 2 ? 0.04 : 0.3
+                let value = Float(exp2(-3+contrast*amplitude*noise[p]))
+                return [value,value,value]
+            }
+            return .init(width:w,height:h,rgb:rgb)
+        }
+        let a = image(1),b = image(1.8)
+        let adaptiveA = SurfaceTracking.Prepared(a),adaptiveB = SurfaceTracking.Prepared(b)
+        let sa = try XCTUnwrap(adaptiveA.geometrySummary(x:cx,y:cy))
+        let sb = try XCTUnwrap(adaptiveB.geometrySummary(x:cx,y:cy))
+        XCTAssertNotEqual(sa.textureCount,sb.textureCount)
+        XCTAssertNil(SurfaceTracking.match(adaptiveA,adaptiveB,x:cx,y:cy,radius:0))
+        let fixedA = SurfaceTracking.Prepared(a,half:6),fixedB = SurfaceTracking.Prepared(b,half:6)
+        let match = try XCTUnwrap(SurfaceTracking.match(fixedA,fixedB,x:cx,y:cy,radius:0))
+        XCTAssertEqual(match.x,cx)
+        XCTAssertEqual(match.y,cy)
+        // Geometric qualification must not certify raw photometric uniformity.
+        XCTAssertLessThan(match.photometricConfidence,1)
+    }
+
+    func testReciprocalDiagnosticsPreserveMatchesAndExplainFlatRejection() throws {
+        let w = 40,h = 32
+        var seed:UInt64 = 719
+        let rgb:[Float] = (0..<w*h*3).map { _ in
+            seed = seed &* 6364136223846793005 &+ 1
+            return 0.08+Float((seed >> 32)%1000)/10000
+        }
+        let source = SurfaceTracking.Prepared(.init(width:w,height:h,rgb:rgb))
+        let shifted = SurfaceTracking.Prepared(.init(width:w,height:h,rgb:(0..<rgb.count).map { p in
+            let x = (p/3)%w,y = (p/3)/w,c = p%3
+            return rgb[(y*w+max(0,x-1))*3+c]*1.3
+        }))
+        let original = try XCTUnwrap(SurfaceTracking.match(source,shifted,x:20,y:16,radius:3))
+        var reasons:[String] = []
+        let observed = try XCTUnwrap(SurfaceTracking.match(source,shifted,x:20,y:16,radius:3,
+            diagnostic: { reason,forward,reverse in
+                reasons.append(reason)
+                XCTAssertNotNil(forward)
+                XCTAssertNotNil(reverse)
+            }))
+        XCTAssertEqual(reasons,["accepted"])
+        XCTAssertEqual(observed.x,original.x)
+        XCTAssertEqual(observed.y,original.y)
+        XCTAssertEqual(observed.error,original.error)
+        XCTAssertEqual(observed.confidence,original.confidence)
+        XCTAssertEqual(observed.channelEV,original.channelEV)
+        let flat = SurfaceTracking.Prepared(.init(width:w,height:h,rgb:Array(repeating:0.12,count:rgb.count)))
+        reasons.removeAll()
+        XCTAssertNil(SurfaceTracking.match(flat,flat,x:20,y:16,radius:3,
+            diagnostic: { reason,forward,reverse in
+                reasons.append(reason)
+                XCTAssertNil(forward)
+                XCTAssertNil(reverse)
+            }))
+        XCTAssertEqual(reasons,["noForwardCandidate"])
+    }
+
     func testEventCentredTrackStopsAtCutsAndRecoversAfterEarlierOcclusion() {
         let w = 32,h = 24
         var seed:UInt64 = 42

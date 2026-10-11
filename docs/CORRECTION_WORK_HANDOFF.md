@@ -196,3 +196,157 @@ The frozen matched/target evaluators remain useful independent comparators; reta
 - Primary research previously consulted: BlazeBVD, ECCV 2024 (`https://www.ecva.net/papers/eccv_2024/papers_ECCV/papers/02526.pdf`), and Blind Video Deflickering by Neural Filtering With a Flawed Atlas, CVPR 2023 (`https://openaccess.thecvf.com/content/CVPR2023/html/Lei_Blind_Video_Deflickering_by_Neural_Filtering_With_a_Flawed_Atlas_CVPR_2023_paper.html`). No model weights or neural correction were integrated.
 
 A useful next-session prompt is: “Read docs/CORRECTION_WORK_HANDOFF.md and continue the LEGO correction diagnosis. Preserve the existing work and evidence; do not enable a prototype until independent encoded and control checks justify it.”
+
+## Resume progress — 11 October 2026
+
+User requested continuation. Expanded `NativeRegionalSurfaceAudit` to retain
+all-seed rejection diagnostics and source-only tracked brightness histories;
+added `report_source_footprints.py` for residual-directed inspection with an
+explicit proximity limit and different-support caveat. See the new section in
+`LEGO_NATIVE_REFINEMENT_REVIEW.md` for native event-187/event-188 results and
+verification. Evidence is `.build/review-v39/source-footprints`, with the useful
+HTML report under `report-v2/report.html`.
+
+The brighter source peak at 187 was checked explicitly and did not recover
+trustworthy support. Geometry, near-clipping and held photometric nonuniformity
+remain the main observed rejection classes near the strongest encoded residuals.
+No prototype was promoted. Next work is native material/geometry inspection and
+matching-termination diagnosis, rather than another unsupported field fit.
+
+### Further progress on continuation
+
+The follow-up pass extracted native frames and traced reciprocal rejection checks.
+It found a contrast-driven 13×13/5×5 descriptor-size switch near the strongest
+residual. A diagnostic-only fixed wider support reduces LEGO geometry rejections
+415→199 and clean-motion rejections 258→9, with existing photometric checks intact.
+A deterministic regression reproduces the size switch; 52 correspondence tests
+pass. Automatic correction defaults are unchanged. Recovered dark printed support
+still lacks valid photometry; wider tracking is not a proven encoded improvement.
+
+See the latest section in `LEGO_NATIVE_REFINEMENT_REVIEW.md` and evidence under
+`.build/review-v40`, especially `matcher-report/report.html` and
+`wide-report/report.html`. Next verify fixed-support native geometry and dark
+brightness estimation independently before any automatic integration. No new
+export or correction control matrix was run in this follow-up.
+
+### Independent native verification of the proposed next steps
+
+User authorized the four-stage verification/correction plan. Added
+`scripts/validation/NativeDisjointSupportAudit.swift`: disjoint native geometry
+rings and central radiance tiles, source PTS checks, nonoverlapping complete
+moving support envelopes, contributor clipping checks before interpolation,
+held photometric tests and explicit geometry eligibility. Self-tests include
+fractional clipping, zero-weight contributors and geometry controls.
+
+Final evidence is `.build/review-v41/report-verified.html`,
+`{lego,clean,ramp}-verified.json`, `verification-verified.json` and
+`frozen-verified/`. Earlier `report.html`/`*-final.json` are provisional before
+contributor-level clipping validation, not the final comparison.
+
+43 disjoint LEGO probes retain 99/304 accepted adjacent native edge checks, but
+all 74 central fits at main events 187/188 fail existing validity/held gates.
+Only one fit qualifies at 185, outside the main flash; it is not authorization
+for correction. Clean moving and intended-ramp targets give <0.002 EV excursions
+on one retained region each, so control coverage is sparse.
+
+No bounded correction, candidate export, Fox correction regression, partial
+slider matrix or app integration was performed because the prerequisite source
+fit failed. These remain pending. Next establish geometry from broader stable
+printed landmarks/object structure and independently quantify dark measurement
+uncertainty. Do not loosen local native gates or resume field fitting merely
+because coarse wider tracks recover more frames. See the latest native review
+section for detailed counts, coordinates, qualifications and reproduction.
+
+V42 continuation: rejected doubled-radius native edge geometry. On the same159
+LEGO pairs it loses15 accepted narrow matches and recovers3; 23 disjoint broad
+regions supply zero qualified fits. Original-radius replay reproduces V41.
+Added source-only spatial deletion/±3pixel meter sensitivity, **not calibrated
+noise uncertainty or temporal error**. Printed(431,303) location brightness range
+is0.47–0.74EV at186–188, while clean/ramp controls also have nonzero spatial
+sensitivity with qualified temporal excursions below0.002EV. Do not use spatial
+range alone to reject temporal metering or relax dark limits. Review/provenance
+`.build/review-v42/review.json`, frozen sources/binary and four native JSONs;
+details in LEGO_NATIVE_REFINEMENT_REVIEW.md. Builds/self-tests pass. No candidate,
+app default change or encoded improvement. Next: coherent separately identified
+printed landmarks with held geometry; temporal position sensitivity and calibrated
+repeat/known-noise evidence for dark surfaces remain unresolved.
+
+V43 continuation: added source-only spatially held similarity transforms
+(NativeLandmarkTransformAudit.py), denser disjoint native landmarks and actual
+three-frame position sensitivity (NativeDisjointSupportAudit.swift). Dense edge
+geometry retains 80 regions but only 1/2 landmarks on main adjacent transitions;
+luminance-shape geometry increases those counts to 4/4, still insufficient for
+two independently spread three-landmark folds. Luminance coverage on clean ramp
+is poor (4/94 versus clean motion 70/94), unresolved and not promoted. Neither
+variant has a jointly geometry/photometry-qualified main fit. Two later fits at
+189/190 do not authorize filling missing main-event evidence. Dark (431,303)
+position-induced temporal excursion changes reach 0.196/0.276 EV at 187/188;
+brighter (495,303) changes are about 0.037 EV. This is a stress test, not allowed
+geometry uncertainty or noise confidence bounds. Original clean/ramp checks have
+changes below 0.005 EV and repeat prior near-zero qualified excursions.
+Final evidence .build/review-v43/*-final.json, *-landmarks-verified.json,
+review-verified.json and frozen/; earlier unsuffixed runs are exploratory.
+Exact V41 original checks/pulses reproduce; all envelopes, builds/self-tests and
+project/diff checks pass. No correction/default change, output candidate or
+encoded improvement. Next inspect native printed identity/contrast at 186→187
+and why the ramp loses luminance-shape coverage; density alone is exhausted.
+Calibrated dark-noise evidence and lighting-model support remain unresolved.
+V43 final control diagnosis: stationary-ramp-review.json verifies from retained
+synthetic foreground masks that (39,39)'s full native support columns have no
+moving foreground at28–33. Clean native luminance scores are approximately1; intended-ramp
+scores0.976–0.991 falsely reject the same stationary structure. This is a specific
+encoded/decoded appearance calibration failure, not established sensor noise or
+permission to lower0.995. audit_stationary_ramp_geometry.py uses masks solely for
+control verification. Next geometry work should explain/correct this known
+failure before its thresholds or descriptors are trusted on dark LEGO prints.
+
+### V48/V49 measured improvement milestone
+
+The current best measured main-flash LEGO research export is
+`dist/Benchmarks/review-v48-native-flux/lego-exposure-8/corrected.mp4`:
+187→188 median absolute EV is **44.2% lower**, maximum **37.1% lower** than the
+retained V33 baseline. Independent phase-7 encoded footprints show **33.0% lower
+median**, **14.4% lower maximum**. All surrounding retained-phase medians/maxima
+improve; shifted quiet variations are below 0.001 EV. Supported whole-clip
+transition-median RMS improves 4.2%, so do not equate the main-event gain with a
+44% whole-video improvement. Individual footprint regressions are retained in
+the report.
+
+The working hypothesis is native integrated regional radiance with four
+leave-query-out donors corroborating timing/sign, then bounded smooth neutral
+exposure fitting through the actual renderer. It allows nonuniform illumination
+within a patch without relaxing the rejected uniform-response validator.
+Geometry remains source-only, contributor clipping stays strict, and native
+support envelopes are disjoint. Source controls with full quorum give zero
+activations (19–27 meters for upscaled clean motion; eight for the independently
+tracked upscaled clean fade). Upscaled controls are derived diagnostics, not
+sensor-noise calibration. Original clean-motion fields and decoded target
+scores are exactly unchanged.
+
+A scaled half-strength full candidate gives intermediate main median/max
+0.091875/0.492347. Do not use the independently refitted half candidate as the
+slider route. All accepted-review media have preserved frame count/timestamps,
+dimensions/durations and LEGO audio payloads. Exports must remain sequential.
+
+A dense-protection LEGO alternative and Fox research candidate are also
+retained. Fox dense fitting reduces its main flash median/max 31.2%/36.0%, but
+one quiet maximum increases by 0.00194 EV. It is not accepted for automatic
+shipping. A 0.0001-EV renderer guard admits no positive Fox step, pointing to the
+coarse-RGB guard Jacobian/native precision as the next issue. Dense source
+protection overlaps phase-6 audit locations; phase 7 is the separate spatial
+check. No frozen encoded residuals are loaded by the fitter.
+
+Automatic app correction remains unchanged. Before a production route, replace
+the coarse-RGB guard Jacobian with measured native pixel/renderer response,
+validate cross-clip quiet boundaries, and generalize the diagnostic ROI/window
+sampling. Prefer neutral exposure to tone fitting based on these encoded
+results. Retain the conservative old pixel-response gate and all rejected
+experiments.
+
+Full verified numbers and artifacts:
+`dist/Benchmarks/review-v49-native-flux/report/index.html` and `report.json`.
+Reproducible fitter/native source snapshots and binaries:
+`.build/review-v48/frozen`; selected full fields were exactly reproduced by its
+fitter. Commands use `NativeMeanFluxAudit.py`, `NativeMeanFieldFit.swift`,
+`ExportRetainedFields.swift` and `report_native_mean_field.py`. Details and
+limitations are appended to `docs/LEGO_NATIVE_REFINEMENT_REVIEW.md`.

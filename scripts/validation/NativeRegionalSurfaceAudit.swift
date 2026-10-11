@@ -87,8 +87,9 @@ import CoreImage
             }
         }
         let affineGeometry = ProcessInfo.processInfo.environment["FRANKLUMA_AFFINE_GEOMETRY_PROBE"] == "1"
+        let wideGeometry = ProcessInfo.processInfo.environment["FRANKLUMA_WIDE_GEOMETRY_PROBE"] == "1"
         let prepared = frames.map { frame -> SurfaceTracking.Prepared in
-            guard affineGeometry else {return SurfaceTracking.Prepared(frame)}
+            guard affineGeometry else {return SurfaceTracking.Prepared(frame,half:wideGeometry ? 6 : 2)}
             // Diagnostic only: reuse reciprocal matcher on linear-Y texture.
             // The exponential cancels its logarithm; source photometry below
             // still uses the unmodified decoded RGB, never this surrogate.
@@ -96,9 +97,9 @@ import CoreImage
                 let p=i*3,y=0.2126*Double(frame.rgb[p])+0.7152*Double(frame.rgb[p+1])+0.0722*Double(frame.rgb[p+2])
                 let v=Float(pow(2,4*y));return [v,v,v]
             }
-            return SurfaceTracking.Prepared(.init(width:frame.width,height:frame.height,rgb:rgb))
+            return SurfaceTracking.Prepared(.init(width:frame.width,height:frame.height,rgb:rgb),half:wideGeometry ? 6 : 2)
         },anchor = event-first
-        var rowsOut:[[String:Any]] = [],rejected:[String:Int] = [:],seeds = 0
+        var rowsOut:[[String:Any]] = [],diagnosticRows:[[String:Any]] = [],rejected:[String:Int] = [:],seeds = 0
         func pixels(_ frame:SpatialThumbnail,_ point:SurfaceTracking.Observation) -> [Double]? {
             let x = Double(point.x)+point.offsetX,y = Double(point.y)+point.offsetY,ix = Int(floor(x)),iy = Int(floor(y)),fx = x-Double(ix),fy = y-Double(iy)
             guard ix >= 2,iy >= 2,ix+3 < w,iy+3 < h else {return nil}
@@ -117,7 +118,34 @@ import CoreImage
             seeds += 1
             let trajectory = SurfaceTracking.trajectoryThrough(prepared,segments:Array(repeating:0,count:frames.count),anchor:anchor,x:x,y:y,radius:8)
             guard trajectory.count >= 4,trajectory.allSatisfy({$0.confidence > 0}),
-                  let a = trajectory.first(where:{$0.frame == anchor-1}),let b = trajectory.first(where:{$0.frame == anchor}),let c = trajectory.first(where:{$0.frame == anchor+1}) else {rejected["geometry",default:0] += 1;continue}
+                  let a = trajectory.first(where:{$0.frame == anchor-1}),let b = trajectory.first(where:{$0.frame == anchor}),let c = trajectory.first(where:{$0.frame == anchor+1}) else {
+                rejected["geometry",default:0] += 1
+                var checks:[[String:Any]] = []
+                // Inspect immediate event neighbors using exactly the production
+                // reciprocal checks; never use rejected candidates as lighting data.
+                for neighbor in [anchor-1,anchor+1] {
+                    _ = SurfaceTracking.match(prepared[anchor],prepared[neighbor],x:x,y:y,radius:8,
+                        diagnostic: { reason,forward,reverse in
+                            func details(_ value:SurfaceTracking.Match?) -> Any {
+                                guard let value else {return NSNull()}
+                                return ["x":Double(x0+value.x)+value.offsetX,
+                                        "y":Double(y0+value.y)+value.offsetY,
+                                        "error":value.error,"confidence":value.confidence,
+                                        "photometricConfidence":value.photometricConfidence]
+                            }
+                            func summary(_ frame:Int) -> Any {
+                                guard let value = prepared[frame].geometrySummary(x:x,y:y) else {return NSNull()}
+                                return ["energy":value.energy,"textureCount":Double(value.textureCount)]
+                            }
+                            checks.append(["from":event,"to":first+neighbor,"reason":reason,
+                                           "sourceAtSeed":summary(anchor),"referenceAtSeed":summary(neighbor),
+                                           "forward":details(forward),"reverse":details(reverse)])
+                        })
+                }
+                diagnosticRows.append(["analysisX":x+x0,"analysisY":y+y0,"rejection":"geometry",
+                                       "persistentFrames":trajectory.count,"eventNeighborChecks":checks])
+                continue
+            }
             let source = [a,b,c].compactMap {pixels(frames[$0.frame],$0)}
             guard source.count == 3 else {rejected["footprint",default:0] += 1;continue}
             let alpha = (times[anchor]-times[anchor-1])/(times[anchor+1]-times[anchor-1])
@@ -134,6 +162,31 @@ import CoreImage
             let affine = CommonIlluminationComponent.pulseLinearLuminancePixels(before:source[0],middle:source[1],after:source[2],alpha:alpha,tolerance:0.04,reference:.arithmeticRadiance)
             if let reason = affine.rejection {rejected["arithmeticAffine:"+reason,default:0] += 1}
             if let reason = stepY.rejection {rejected["stepY:"+reason,default:0] += 1}
+            // Retain rejected evidence as well as accepted fits. Otherwise the
+            // strongest residual surfaces disappear from the model diagnosis.
+            let history:[[String:Any]] = trajectory.compactMap { point in
+                guard let values = pixels(frames[point.frame],point) else {return nil}
+                let luminance = (0..<25).map { i in
+                    0.2126*values[i*3]+0.7152*values[i*3+1]+0.0722*values[i*3+2]
+                }.sorted()
+                let means = (0..<3).map { channel in
+                    (0..<25).reduce(0.0) {$0+values[$1*3+channel]}/25
+                }
+                return ["frame":first+point.frame,"pts":times[point.frame],
+                        "analysisX":Double(x0+point.x)+point.offsetX,
+                        "analysisY":Double(y0+point.y)+point.offsetY,
+                        "confidence":point.confidence,"meanRGB":means,
+                        "meanY":luminance.reduce(0,+)/25,
+                        "p10Y":luminance[2],"p90Y":luminance[22],
+                        "minimumRGB":values.min()!,"maximumRGB":values.max()!]
+            }
+            diagnosticRows.append(["analysisX":x+x0,"analysisY":y+y0,
+                                   "history":history,
+                                   "pulseRGBRejection":pulse.rejection as Any? ?? NSNull(),
+                                   "stepRGBRejection":step.rejection as Any? ?? NSNull(),
+                                   "pulseYRejection":pulseY.rejection as Any? ?? NSNull(),
+                                   "affineRejection":affine.rejection as Any? ?? NSNull(),
+                                   "planeRejection":plane.rejection as Any? ?? NSNull()])
             if pulse.rejection == nil || step.rejection == nil || pulseY.rejection == nil || stepY.rejection == nil || affine.rejection == nil || plane.rejection == nil {
                 let result = [a,b].compactMap {pixels(rendered[$0.frame],$0)}
                 func ev(_ rgb:[Double]) -> Double {
@@ -143,7 +196,7 @@ import CoreImage
                 rowsOut.append(["planeRejection":plane.rejection as Any? ?? NSNull(),"planeCoefficients":plane.coefficients,"arithmeticAffineRejection":affine.rejection as Any? ?? NSNull(),"arithmeticAffineGain":affine.gain as Any? ?? NSNull(),"arithmeticAffineOffset":affine.offset as Any? ?? NSNull(),"outputMeanLuminanceStepEV":outputStep,"analysisX":x+x0,"analysisY":y+y0,"normalisedX":Double(x+x0)/Double(width),"normalisedY":Double(y+y0)/Double(height),"pulseY":pulseY.channelExcursion,"pulseYRejection":pulseY.rejection as Any? ?? NSNull(),"stepY":stepY.channelExcursion,"stepYRejection":stepY.rejection as Any? ?? NSNull(),"persistentFrames":trajectory.count,"pulseRGB":pulse.channelExcursion,"pulseRejection":pulse.rejection as Any? ?? NSNull(),"stepRGB":step.channelExcursion,"stepRejection":step.rejection as Any? ?? NSNull(),"geometryConfidence":trajectory.map(\.confidence).min()!])
             }
         }}
-        let report:[String:Any] = ["areaResamplingProbe":areaResampling,"affineGeometryProbe":affineGeometry,"source":args[1],"first":first,"endExclusive":end,"event":event,"hasRetainedCorrection":args.count == 13,"analysisWidth":width,"analysisHeight":height,"roi":[x0,y0,w,h],"roiOrigin":"top-left bitmap rows, checked against full-frame raster","times":times,"seeds":seeds,"rows":rowsOut,"rejections":rejected,"limitation":"Source-only bounded ROI diagnostic, actual decoded PTS. Fixed five-pixel photometry and geometry supports shrink physically at finer analysis resolutions; these results isolate no single resolution effect. No disjoint donor certification, native support independence, clean target, rendered gain fit or correction authorization. Tracks and meter footprints can overlap." ]
+        let report:[String:Any] = ["wideGeometryProbe":wideGeometry,"areaResamplingProbe":areaResampling,"affineGeometryProbe":affineGeometry,"source":args[1],"first":first,"endExclusive":end,"event":event,"hasRetainedCorrection":args.count == 13,"analysisWidth":width,"analysisHeight":height,"roi":[x0,y0,w,h],"roiOrigin":"top-left bitmap rows, checked against full-frame raster","times":times,"seeds":seeds,"rows":rowsOut,"diagnosticRows":diagnosticRows,"rejections":rejected,"limitation":"Source-only bounded ROI diagnostic, actual decoded PTS. Fixed five-pixel photometry and geometry supports shrink physically at finer analysis resolutions; these results isolate no single resolution effect. No disjoint donor certification, native support independence, clean target, rendered gain fit or correction authorization. Tracks and meter footprints can overlap." ]
         try JSONSerialization.data(withJSONObject:report,options:[.prettyPrinted,.sortedKeys]).write(to:destination,options:.withoutOverwriting)
         print("FINE_SURFACE",width,"plane",rowsOut.filter {$0["planeRejection"] is NSNull}.count,"arithmeticAffine",rowsOut.filter {$0["arithmeticAffineRejection"] is NSNull}.count,"seeds",seeds,"pulse",rowsOut.filter {$0["pulseRejection"] is NSNull}.count,"step",rowsOut.filter {$0["stepRejection"] is NSNull}.count,"stepY",rowsOut.filter {$0["stepYRejection"] is NSNull}.count,"pulseY",rowsOut.filter {$0["pulseYRejection"] is NSNull}.count,"rejections",rejected)
     }
